@@ -7,6 +7,7 @@ import {
   createPopupButton,
   getOverlay,
 } from '../../tools/preview/preview.js';
+// eslint-disable-next-line import/no-cycle
 import { getAllMetadata } from '../scripts.js';
 /*
  * Copyright 2022 Adobe. All rights reserved.
