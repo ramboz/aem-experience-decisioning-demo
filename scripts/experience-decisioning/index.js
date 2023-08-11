@@ -43,7 +43,7 @@ function isBot() {
  *        id: <string>,
  *        label: <string>,
  *        blocks: [<string>]
- *        audience: Desktop | Mobile,
+ *        audiences: [<string>],
  *        status: Active | Inactive,
  *        variantNames: [<string>],
  *        variants: {
@@ -61,7 +61,11 @@ function parseExperimentConfig(json) {
   try {
     json.settings.data.forEach((line) => {
       const key = toCamelCase(line.Name);
-      config[key] = line.Value;
+      if (key === 'audience') {
+        config.audiences = line.Value;
+      } else {
+        config[key] = line.Value;
+      }
     });
     const variants = {};
     let variantNames = Object.keys(json.experiences.data[0]);
@@ -134,7 +138,7 @@ export function isValidConfig(config) {
 export function getConfigForInstantExperiment(experimentId, instantExperiment) {
   const config = {
     label: `Instant Experiment: ${experimentId}`,
-    audience: '',
+    audiences: getMetadata('experiment-audience').split(',').map(toClassName),
     status: 'Active',
     id: experimentId,
     variants: {},
@@ -237,19 +241,17 @@ function getDecisionPolicy(config) {
   return decisionPolicy;
 }
 
-/**
- * this is an extensible stub to take on audience mappings
- * @param {string} audience
- * @return {boolean} is member of this audience
- */
-function isValidAudience(audience) {
-  if (audience === 'mobile') {
-    return window.innerWidth < 600;
-  }
-  if (audience === 'desktop') {
-    return window.innerWidth >= 600;
-  }
-  return true;
+async function getResolvedAudiences(configured, { audiences = {} }, defaultValue) {
+  const results = await Promise.all(
+    configured
+      .map((key) => {
+        if (audiences[key] && typeof audiences[key] === 'function') {
+          return audiences[key]();
+        }
+        return defaultValue;
+      }),
+  );
+  return Object.keys(audiences).filter((_, i) => results[i]);
 }
 
 /**
@@ -292,7 +294,7 @@ export async function getConfig(experiment, instantExperiment, config) {
   }
 
   experimentConfig.run = !!forcedExperiment
-    || isValidAudience(toClassName(experimentConfig.audience));
+    || !!(await getResolvedAudiences(experimentConfig.audiences, config)).length;
   if (!experimentConfig.run) {
     return null;
   }
@@ -300,7 +302,7 @@ export async function getConfig(experiment, instantExperiment, config) {
   window.hlx = window.hlx || {};
   window.hlx.experiment = experimentConfig;
   // eslint-disable-next-line no-console
-  console.debug('run', experimentConfig.run, experimentConfig.audience);
+  console.debug('run', experimentConfig.run, experimentConfig.audiences);
   if (forcedVariant && experimentConfig.variantNames.includes(forcedVariant)) {
     experimentConfig.selectedVariant = forcedVariant;
   } else {
@@ -369,19 +371,6 @@ export async function runExperiment(customOptions = {}) {
   return result;
 }
 
-async function getApplicableAudiences(configured, { audiences = {} }) {
-  const results = await Promise.all(
-    Object.keys(configured)
-      .map((key) => {
-        if (audiences[key] && typeof audiences[key] === 'function') {
-          return audiences[key]();
-        }
-        return false;
-      }),
-  );
-  return Object.keys(audiences).filter((_, i) => results[i]);
-}
-
 export async function serveAudience(customOptions) {
   if (isBot()) {
     return null;
@@ -389,7 +378,7 @@ export async function serveAudience(customOptions) {
 
   const options = { ...DEFAULT_OPTIONS, ...customOptions };
   const configuredAudiences = getAllMetadata(options.audiencesMetaTagPrefix);
-  const audiences = await getApplicableAudiences(configuredAudiences, options);
+  const audiences = await getResolvedAudiences(Object.keys(configuredAudiences), options, false);
   if (!audiences.length) {
     return null;
   }
