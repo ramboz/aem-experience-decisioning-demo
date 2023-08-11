@@ -268,7 +268,9 @@ async function decorateCampaignPill(overlay) {
       ...Object.keys(campaigns).map((c) => createCampaign(c, toClassName(campaign) === c)),
     ],
   );
-  pill.classList.add(`is-${toClassName(campaign ? 'active' : 'inactive')}`);
+  if (campaign) {
+    pill.classList.add('is-active');
+  }
   overlay.append(pill);
 }
 
