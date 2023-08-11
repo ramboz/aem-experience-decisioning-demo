@@ -13,7 +13,7 @@ import {
   getMetadata,
   sampleRUM,
   toCamelCase,
-  toClassName
+  toClassName,
 } from '../lib-franklin.js';
 
 export const DEFAULT_OPTIONS = {
@@ -29,20 +29,6 @@ export const DEFAULT_OPTIONS = {
  */
 function isBot() {
   return navigator.userAgent.match(/bot|crawl|spider/i);
-}
-
-/**
- * Gets all the metadata elements that are in the given scope.
- * @param {String} scope The scope/prefix for the metadata
- * @returns an array of HTMLElement nodes that match the given scope
- */
-function getAllMetadata(scope) {
-  return [...document.head.querySelectorAll(`meta[property^="${scope}:"],meta[name^="${scope}-"]`)].map((meta) => {
-    const id = this.toClassName(meta.name
-      ? meta.name.substring(scope.length + 1)
-      : meta.getAttribute('property').split(':')[1]);
-    return { id, urls: meta.getAttribute('content').split(',').map((url) => url.trim()) };
-  });
 }
 
 /**
@@ -324,16 +310,16 @@ export async function getConfig(experiment, instantExperiment, config) {
 
 export async function runExperiment(customOptions = {}) {
   if (isBot()) {
-    return null;
+    return false;
   }
 
-  const options = Object.assign({}, DEFAULT_OPTIONS, customOptions);
+  const options = { ...DEFAULT_OPTIONS, ...customOptions };
   const experiment = getMetadata('experiment');
   if (!experiment) {
-    return;
+    return false;
   }
   const variants = getMetadata('instant-experiment') || getMetadata('experiment-variants');
-  let experimentConfig
+  let experimentConfig;
   try {
     experimentConfig = await getConfig(experiment, variants, options);
   } catch (err) {
@@ -343,7 +329,7 @@ export async function runExperiment(customOptions = {}) {
   if (!experimentConfig || !isValidConfig(experimentConfig)) {
     // eslint-disable-next-line no-console
     console.warn('Invalid experiment config. Please review your metadata, sheet and parser.');
-    return;
+    return false;
   }
   // eslint-disable-next-line no-console
   console.debug(`running experiment (${window.hlx.experiment.id}) -> ${window.hlx.experiment.selectedVariant}`);
