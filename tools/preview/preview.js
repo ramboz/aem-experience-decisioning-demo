@@ -41,7 +41,7 @@ function createPopupItem(item) {
 
 function createPopupDialog(header, items = []) {
   const actions = typeof header === 'object'
-    ? header.actions.map((action) => `<div class="hlx-button"><a href="${action.href}">${action.label}</a></div>`)
+    ? (header.actions || []).map((action) => `<div class="hlx-button"><a href="${action.href}">${action.label}</a></div>`)
     : [];
   const popup = document.createElement('div');
   popup.className = 'hlx-popup hlx-hidden';
@@ -99,7 +99,7 @@ export function getOverlay() {
  * @return {Object} returns a badge or empty string
  */
 export default async function lazy(doc, options) {
-  loadCSS(`/tools/preview/preview.css`);
+  loadCSS('/tools/preview/preview.css');
 
   getOverlay(options);
 }
