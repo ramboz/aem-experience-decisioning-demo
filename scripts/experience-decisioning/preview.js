@@ -203,6 +203,7 @@ function populatePerformanceMetrics(div, config, {
 async function decorateExperimentPill(overlay) {
   const config = window?.hlx?.experiment;
   const experiment = toClassName(getMetadata('experiment'));
+  // eslint-disable-next-line no-console
   console.log('preview experiment', experiment);
   if (!experiment || !config) {
     return;
@@ -284,6 +285,7 @@ export default async function decoratePreviewMode() {
     await decorateExperimentPill(overlay);
     await decorateCampaignPill(overlay);
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.log(e);
   }
 }
