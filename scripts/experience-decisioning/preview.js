@@ -7,6 +7,7 @@ import {
   createPopupButton,
   getOverlay,
 } from '../../tools/preview/preview.js';
+import { getAllMetadata } from '../scripts.js';
 /*
  * Copyright 2022 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
@@ -230,6 +231,47 @@ async function decorateExperimentPill(overlay) {
   populatePerformanceMetrics(pill, config, performanceMetrics);
 }
 
+function createCampaign(campaign, isSelected) {
+  const url = new URL(window.location.href);
+  if (campaign !== 'default') {
+    url.searchParams.set('campaign', campaign);
+  } else {
+    url.searchParams.delete('campaign');
+  }
+
+  return {
+    label: `<code>${campaign}</code>`,
+    actions: [{ label: 'Switch', href: url.href }],
+    isSelected,
+  };
+}
+
+/**
+ * Create Badge if a Page is enlisted in a Franklin Campign
+ * @return {Object} returns a badge or empty string
+ */
+async function decorateCampaignPill(overlay) {
+  const campaigns = getAllMetadata('campaign');
+  if (!Object.keys(campaigns).length) {
+    return;
+  }
+
+  const usp = new URLSearchParams(window.location.search);
+  const campaign = usp.has('campaign') ? toClassName(usp.get('campaign')) : null;
+  const pill = createPopupButton(
+    `Campaign: ${campaign || 'default'}`,
+    {
+      label: 'Campaigns on this page',
+    },
+    [
+      createCampaign('default', !campaign),
+      ...Object.keys(campaigns).map((c) => createCampaign(c, toClassName(campaign) === c)),
+    ],
+  );
+  pill.classList.add(`is-${toClassName(campaign ? 'active' : 'inactive')}`);
+  overlay.append(pill);
+}
+
 /**
  * Decorates Preview mode badges and overlays
  * @return {Object} returns a badge or empty string
@@ -238,6 +280,7 @@ export default async function decoratePreviewMode() {
   try {
     const overlay = getOverlay();
     await decorateExperimentPill(overlay);
+    await decorateCampaignPill(overlay);
   } catch (e) {
     console.log(e);
   }

@@ -9,12 +9,30 @@ import {
   decorateBlocks,
   decorateTemplateAndTheme,
   getMetadata,
+  toClassName,
   waitForLCP,
   loadBlocks,
   loadCSS,
 } from './lib-franklin.js';
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
+
+/**
+ * Gets all the metadata elements that are in the given scope.
+ * @param {String} scope The scope/prefix for the metadata
+ * @returns an array of HTMLElement nodes that match the given scope
+ */
+export function getAllMetadata(scope) {
+  return [...document.head.querySelectorAll(`meta[property^="${scope}:"],meta[name^="${scope}-"]`)]
+    .reduce((res, meta) => {
+      const id = toClassName(meta.name
+        ? meta.name.substring(scope.length + 1)
+        : meta.getAttribute('property').split(':')[1]);
+      res[id] = meta.getAttribute('content');
+      return res;
+    }, {});
+}
+
 const plugins = {
   preview: {
     condition: () => window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost'),
@@ -24,14 +42,10 @@ const plugins = {
     },
   },
   experienceDecisioning: {
-    condition: () => !!document.head.querySelectorAll('meta[name="experiment"]').length,
+    condition: () => !!getMetadata('experiment') || Object.keys(getAllMetadata('campaign')).length,
     loadEager: async () => {
-      const experiment = getMetadata('experiment');
-      const instantExperiment = getMetadata('instant-experiment');
-      if (instantExperiment || experiment) {
-        const { loadEager: runEager } = await import('./experience-decisioning/index.js');
-        await runEager();
-      }
+      const { loadEager: runEager } = await import('./experience-decisioning/index.js');
+      await runEager();
     },
     loadLazy: async () => {
       if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {

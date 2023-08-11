@@ -15,6 +15,7 @@ import {
   toCamelCase,
   toClassName
 } from '../lib-franklin.js';
+import { getAllMetadata } from '../scripts.js';
 
 export const DEFAULT_OPTIONS = {
   root: '/experiments',
@@ -29,20 +30,6 @@ export const DEFAULT_OPTIONS = {
  */
 function isBot() {
   return navigator.userAgent.match(/bot|crawl|spider/i);
-}
-
-/**
- * Gets all the metadata elements that are in the given scope.
- * @param {String} scope The scope/prefix for the metadata
- * @returns an array of HTMLElement nodes that match the given scope
- */
-function getAllMetadata(scope) {
-  return [...document.head.querySelectorAll(`meta[property^="${scope}:"],meta[name^="${scope}-"]`)].map((meta) => {
-    const id = this.toClassName(meta.name
-      ? meta.name.substring(scope.length + 1)
-      : meta.getAttribute('property').split(':')[1]);
-    return { id, urls: meta.getAttribute('content').split(',').map((url) => url.trim()) };
-  });
 }
 
 /**
@@ -369,6 +356,36 @@ export async function runExperiment(customOptions = {}) {
   return resut;
 }
 
+export async function runCampaign() {
+  if (isBot()) {
+    return null;
+  }
+
+  const usp = new URLSearchParams(window.location.search);
+  const campaign = usp.has('campaign') ? toClassName(usp.get('campaign')) : null;
+  if (!campaign) {
+    return null;
+  }
+
+  const allowedCampaigns = getAllMetadata('campaign');
+  if (!Object.keys(allowedCampaigns).includes(campaign)) {
+    return null;
+  }
+
+  const urlString = allowedCampaigns[campaign];
+  if (!urlString) {
+    return null;
+  }
+
+  try {
+    const url = new URL(urlString);
+    return replaceInner(url.pathname, document.querySelector('main'));
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 window.hlx.patchBlockConfig.push((config) => {
   const { experiment } = window.hlx;
 
@@ -431,6 +448,7 @@ window.hlx.patchBlockConfig.push((config) => {
 
 export async function loadEager(customOptions = {}) {
   await runExperiment(customOptions);
+  await runCampaign(customOptions);
 }
 
 export async function loadLazy(customOptions = {}) {
