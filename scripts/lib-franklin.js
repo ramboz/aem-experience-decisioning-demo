@@ -429,11 +429,11 @@ export function buildBlock(blockName, content) {
 }
 
 /**
- * Gets the configuration for the given glock, and also passes
- * the config to the `patchBlockConfig` methods in the plugins.
+ * Gets the configuration for the given block, and also passes
+ * the config through the `patchBlockConfig` methods in the plugins.
  *
  * @param {Element} block The block element
- * @returns {object} The block config (blockName, cssPath and jsPath)
+ * @returns {Object} The block config (blockName, cssPath and jsPath)
  */
 function getBlockConfig(block) {
   const { blockName } = block.dataset;
