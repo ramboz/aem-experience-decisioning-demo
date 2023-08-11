@@ -15,6 +15,7 @@ import {
   toCamelCase,
   toClassName,
 } from '../lib-franklin.js';
+// eslint-disable-next-line import/no-cycle
 import { getAllMetadata } from '../scripts.js';
 
 export const DEFAULT_OPTIONS = {
@@ -483,6 +484,6 @@ export async function loadLazy(customOptions = {}) {
     ...DEFAULT_OPTIONS,
     ...customOptions,
   };
-  const preview = await import(`./preview.js`);
+  const preview = await import('./preview.js');
   preview.default(options);
 }
