@@ -44,6 +44,7 @@ const plugins = {
   experienceDecisioning: {
     condition: () => !!getMetadata('experiment') || Object.keys(getAllMetadata('campaign')).length,
     loadEager: async () => {
+      // eslint-disable-next-line import/no-cycle
       const { loadEager: runEager } = await import('./experience-decisioning/index.js');
       await runEager();
     },
