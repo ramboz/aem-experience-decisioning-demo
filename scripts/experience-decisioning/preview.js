@@ -49,7 +49,7 @@ const bigcountformat = {
   },
 };
 
-function createVariant(experiment, variantName, config) {
+function createVariant(experiment, variantName, config, options) {
   const selectedVariant = config?.selectedVariant || config?.variantNames[0];
   const variant = config.variants[variantName];
   const split = +variant.percentageSplit
@@ -58,7 +58,7 @@ function createVariant(experiment, variantName, config) {
 
   const experimentURL = new URL(window.location.href);
   // this will retain other query params such as ?rum=on
-  experimentURL.searchParams.set('experiment', `${experiment}/${variantName}`);
+  experimentURL.searchParams.set(options.experimentsQueryParameter, `${experiment}/${variantName}`);
 
   return {
     label: `<code>${variantName}</code>`,
@@ -71,10 +71,10 @@ function createVariant(experiment, variantName, config) {
   };
 }
 
-async function fetchRumData(experiment) {
+async function fetchRumData(experiment, options) {
   // the query is a bit slow, so I'm only fetching the results when the popup is opened
   const resultsURL = new URL('https://helix-pages.anywhere.run/helix-services/run-query@v2/rum-experiments');
-  resultsURL.searchParams.set('experiment', experiment);
+  resultsURL.searchParams.set(options.experimentsQueryParameter, experiment);
   if (window.hlx.sidekickConfig && window.hlx.sidekickConfig.host) {
     // restrict results to the production host, this also reduces query cost
     resultsURL.searchParams.set('domain', window.hlx.sidekickConfig.host);
@@ -201,9 +201,9 @@ function populatePerformanceMetrics(div, config, {
  * Create Badge if a Page is enlisted in a Helix Experiment
  * @return {Object} returns a badge or empty string
  */
-async function decorateExperimentPill(overlay) {
+async function decorateExperimentPill(overlay, options) {
   const config = window?.hlx?.experiment;
-  const experiment = toClassName(getMetadata('experiment'));
+  const experiment = toClassName(getMetadata(options.experimentsMetaTag));
   // eslint-disable-next-line no-console
   console.log('preview experiment', experiment);
   if (!experiment || !config) {
@@ -221,24 +221,24 @@ async function decorateExperimentPill(overlay) {
         <div class="hlx-info">How is it going?</div>`,
       actions: config.manifest ? [{ label: 'Manifest', href: config.manifest }] : [],
     },
-    config.variantNames.map((vname) => createVariant(experiment, vname, config)),
+    config.variantNames.map((vname) => createVariant(experiment, vname, config, options)),
   );
   pill.classList.add(`is-${toClassName(config.status)}`);
   overlay.append(pill);
 
-  const performanceMetrics = await fetchRumData(experiment);
+  const performanceMetrics = await fetchRumData(experiment, options);
   if (performanceMetrics === null) {
     return;
   }
   populatePerformanceMetrics(pill, config, performanceMetrics);
 }
 
-function createCampaign(campaign, isSelected) {
+function createCampaign(campaign, isSelected, options) {
   const url = new URL(window.location.href);
   if (campaign !== 'default') {
-    url.searchParams.set('campaign', campaign);
+    url.searchParams.set(options.campaignsQueryParameter, campaign);
   } else {
-    url.searchParams.delete('campaign');
+    url.searchParams.delete(options.campaignsQueryParameter);
   }
 
   return {
@@ -252,22 +252,24 @@ function createCampaign(campaign, isSelected) {
  * Create Badge if a Page is enlisted in a Franklin Campign
  * @return {Object} returns a badge or empty string
  */
-async function decorateCampaignPill(overlay) {
-  const campaigns = getAllMetadata('campaign');
+async function decorateCampaignPill(overlay, options) {
+  const campaigns = getAllMetadata(options.campaignsMetaTagPrefix);
   if (!Object.keys(campaigns).length) {
     return;
   }
 
   const usp = new URLSearchParams(window.location.search);
-  const campaign = usp.has('campaign') ? toClassName(usp.get('campaign')) : null;
+  const campaign = usp.has(options.campaignsQueryParameter)
+    ? toClassName(usp.get(options.campaignsQueryParameter))
+    : null;
   const pill = createPopupButton(
     `Campaign: ${campaign || 'default'}`,
     {
       label: 'Campaigns on this page',
     },
     [
-      createCampaign('default', !campaign),
-      ...Object.keys(campaigns).map((c) => createCampaign(c, toClassName(campaign) === c)),
+      createCampaign('default', !campaign, options),
+      ...Object.keys(campaigns).map((c) => createCampaign(c, toClassName(campaign) === c, options)),
     ],
   );
   if (campaign) {
@@ -280,11 +282,11 @@ async function decorateCampaignPill(overlay) {
  * Decorates Preview mode badges and overlays
  * @return {Object} returns a badge or empty string
  */
-export default async function decoratePreviewMode() {
+export default async function decoratePreviewMode(options) {
   try {
     const overlay = getOverlay();
-    await decorateExperimentPill(overlay);
-    await decorateCampaignPill(overlay);
+    await decorateExperimentPill(overlay, options);
+    await decorateCampaignPill(overlay, options);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(e);

@@ -19,10 +19,12 @@ import {
 import { getAllMetadata } from '../scripts.js';
 
 export const DEFAULT_OPTIONS = {
-  root: '/experiments',
-  configFile: 'manifest.json',
-  metaTag: 'experiment',
-  queryParameter: 'experiment',
+  campaignsMetaTagPrefix: 'campaign',
+  campaignsQueryParameter: 'campaign',
+  experimentsRoot: '/experiments',
+  experimentsConfigFile: 'manifest.json',
+  experimentsMetaTag: 'experiment',
+  experimentsQueryParameter: 'experiment',
 };
 
 /**
@@ -182,7 +184,7 @@ export function getConfigForInstantExperiment(experimentId, instantExperiment) {
  * @returns {object} containing the experiment manifest
  */
 export async function getConfigForFullExperiment(experimentId, cfg) {
-  const path = `${cfg.root}/${experimentId}/${cfg.configFile}`;
+  const path = `${cfg.experimentsRoot}/${experimentId}/${cfg.experimentsConfigFile}`;
   try {
     const resp = await fetch(path);
     if (!resp.ok) {
@@ -199,7 +201,7 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
     }
     config.id = experimentId;
     config.manifest = path;
-    config.basePath = `${cfg.root}/${experimentId}`;
+    config.basePath = `${cfg.experimentsRoot}/${experimentId}`;
     return config;
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -316,7 +318,7 @@ export async function runExperiment(customOptions = {}) {
   }
 
   const options = { ...DEFAULT_OPTIONS, ...customOptions };
-  const experiment = getMetadata('experiment');
+  const experiment = getMetadata(options.experimentsMetaTag);
   if (!experiment) {
     return false;
   }
@@ -367,18 +369,21 @@ export async function runExperiment(customOptions = {}) {
   return result;
 }
 
-export async function runCampaign() {
+export async function runCampaign(customOptions) {
   if (isBot()) {
     return null;
   }
 
+  const options = { ...DEFAULT_OPTIONS, ...customOptions };
   const usp = new URLSearchParams(window.location.search);
-  const campaign = usp.has('campaign') ? toClassName(usp.get('campaign')) : null;
+  const campaign = usp.has(options.campaignsQueryParameter)
+    ? toClassName(usp.get(options.campaignsQueryParameter))
+    : null;
   if (!campaign) {
     return null;
   }
 
-  const allowedCampaigns = getAllMetadata('campaign');
+  const allowedCampaigns = getAllMetadata(options.campaignsMetaTagPrefix);
   if (!Object.keys(allowedCampaigns).includes(campaign)) {
     return null;
   }
