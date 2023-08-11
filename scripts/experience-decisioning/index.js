@@ -13,7 +13,7 @@ import {
   getMetadata,
   sampleRUM,
   toCamelCase,
-  toClassName
+  toClassName,
 } from '../lib-franklin.js';
 import { getAllMetadata } from '../scripts.js';
 
@@ -311,16 +311,16 @@ export async function getConfig(experiment, instantExperiment, config) {
 
 export async function runExperiment(customOptions = {}) {
   if (isBot()) {
-    return null;
+    return false;
   }
 
-  const options = Object.assign({}, DEFAULT_OPTIONS, customOptions);
+  const options = { ...DEFAULT_OPTIONS, ...customOptions };
   const experiment = getMetadata('experiment');
   if (!experiment) {
-    return;
+    return false;
   }
   const variants = getMetadata('instant-experiment') || getMetadata('experiment-variants');
-  let experimentConfig
+  let experimentConfig;
   try {
     experimentConfig = await getConfig(experiment, variants, options);
   } catch (err) {
@@ -330,7 +330,7 @@ export async function runExperiment(customOptions = {}) {
   if (!experimentConfig || !isValidConfig(experimentConfig)) {
     // eslint-disable-next-line no-console
     console.warn('Invalid experiment config. Please review your metadata, sheet and parser.');
-    return;
+    return false;
   }
   // eslint-disable-next-line no-console
   console.debug(`running experiment (${window.hlx.experiment.id}) -> ${window.hlx.experiment.selectedVariant}`);
