@@ -357,16 +357,16 @@ export async function runExperiment(customOptions = {}) {
 
   // Fullpage content experiment
   document.body.classList.add(`experiment-${experimentConfig.id}`);
-  const resut = await replaceInner(pages[0], document.querySelector('main'));
-  if (!resut) {
+  const result = await replaceInner(pages[0], document.querySelector('main'));
+  if (!result) {
     console.debug(`failed to serve variant ${window.hlx.experiment.selectedVariant}. Falling back to ${experimentConfig.variantNames[0]}.`);
   }
-  document.body.classList.add(`variant-${resut ? experimentConfig.selectedVariant : experimentConfig.variantNames[0]}`);
+  document.body.classList.add(`variant-${result ? experimentConfig.selectedVariant : experimentConfig.variantNames[0]}`);
   sampleRUM('experiment', {
     source: experimentConfig.id,
-    target: resut ? experimentConfig.selectedVariant : experimentConfig.variantNames[0],
+    target: result ? experimentConfig.selectedVariant : experimentConfig.variantNames[0],
   });
-  return resut;
+  return result;
 }
 
 window.hlx.patchBlockConfig.push((config) => {
