@@ -24,14 +24,11 @@ const plugins = {
     },
   },
   experienceDecisioning: {
-    condition: () => !!document.head.querySelectorAll('meta[name="experiment"]').length,
+    condition: () => getMetadata('experiment') || getMetadata('instant-experiment'),
     loadEager: async () => {
-      const experiment = getMetadata('experiment');
-      const instantExperiment = getMetadata('instant-experiment');
-      if (instantExperiment || experiment) {
-        const { loadEager: runEager } = await import('./experience-decisioning/index.js');
-        await runEager();
-      }
+      // eslint-disable-next-line import/no-cycle
+      const { loadEager: runEager } = await import('./experience-decisioning/index.js');
+      await runEager();
     },
     loadLazy: async () => {
       if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
