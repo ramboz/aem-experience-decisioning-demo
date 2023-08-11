@@ -8,12 +8,40 @@ import {
   decorateSections,
   decorateBlocks,
   decorateTemplateAndTheme,
+  getMetadata,
   waitForLCP,
   loadBlocks,
   loadCSS,
 } from './lib-franklin.js';
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
+
+const previewPlugin = {
+  condition: () => window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost'),
+  loadLazy: async () => {
+    const preview = await import('../tools/preview/preview.js');
+    preview.default();
+  },
+};
+
+const experienceDecisioningPlugin = {
+  condition: () => !!document.head.querySelectorAll('meta[name="experiment"]').length,
+  loadEager: async () => {
+    const experiment = getMetadata('experiment');
+    const instantExperiment = getMetadata('instant-experiment');
+    if (instantExperiment || experiment) {
+      const { runExperiment } = await import('./experience-decisioning/index.js');
+      await runExperiment();
+    }
+  },
+  loadLazy: async () => {
+    if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
+      // eslint-disable-next-line import/extensions
+      const preview = await import('./experience-decisioning/preview.js');
+      preview.default();
+    }
+  },
+};
 
 /**
  * Builds hero block and prepends to main in a new section.
@@ -76,6 +104,9 @@ export function decorateMain(main) {
 async function loadEager(doc) {
   document.documentElement.lang = 'en';
   decorateTemplateAndTheme();
+  if (experienceDecisioningPlugin.condition()) {
+    await experienceDecisioningPlugin.loadEager();
+  }
   const main = doc.querySelector('main');
   if (main) {
     decorateMain(main);
@@ -114,6 +145,13 @@ async function loadLazy(doc) {
   sampleRUM('lazy');
   sampleRUM.observe(main.querySelectorAll('div[data-block-name]'));
   sampleRUM.observe(main.querySelectorAll('picture > img'));
+
+  if (previewPlugin.condition()) {
+    await previewPlugin.loadLazy();
+  }
+  if (experienceDecisioningPlugin.condition()) {
+    await experienceDecisioningPlugin.loadLazy();
+  }
 }
 
 /**
