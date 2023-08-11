@@ -15,8 +15,11 @@ import {
   toCamelCase,
   toClassName,
 } from '../lib-franklin.js';
+import { getAllMetadata } from '../scripts.js';
 
 export const DEFAULT_OPTIONS = {
+  audiencesMetaTagPrefix: 'audience',
+  audiencesQueryParameter: 'audience',
   root: '/experiments',
   configFile: 'manifest.json',
   metaTag: 'experiment',
@@ -365,6 +368,51 @@ export async function runExperiment(customOptions = {}) {
   return result;
 }
 
+async function getApplicableAudiences(configured, { audiences = {} }) {
+  const results = await Promise.all(
+    Object.keys(configured)
+      .map((key) => {
+        if (audiences[key] && typeof audiences[key] === 'function') {
+          return audiences[key]();
+        }
+        return false;
+      }),
+  );
+  return Object.keys(audiences).filter((_, i) => results[i]);
+}
+
+export async function serveAudience(customOptions) {
+  if (isBot()) {
+    return null;
+  }
+
+  const options = { ...DEFAULT_OPTIONS, ...customOptions };
+  const configuredAudiences = getAllMetadata(options.audiencesMetaTagPrefix);
+  const audiences = await getApplicableAudiences(configuredAudiences, options);
+  if (!audiences.length) {
+    return null;
+  }
+
+  const usp = new URLSearchParams(window.location.search);
+  const forcedAudience = usp.has(options.audiencesQueryParameter)
+    ? toClassName(usp.get(options.audiencesQueryParameter))
+    : null;
+
+  const urlString = configuredAudiences[forcedAudience || audiences[0]];
+  if (!urlString) {
+    return null;
+  }
+
+  try {
+    const url = new URL(urlString);
+    return replaceInner(url.pathname, document.querySelector('main'));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return null;
+  }
+}
+
 window.hlx.patchBlockConfig.push((config) => {
   const { experiment } = window.hlx;
 
@@ -427,6 +475,7 @@ window.hlx.patchBlockConfig.push((config) => {
 
 export async function loadEager(customOptions = {}) {
   await runExperiment(customOptions);
+  await serveAudience(customOptions);
 }
 
 export async function loadLazy(customOptions = {}) {
