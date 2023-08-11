@@ -1,10 +1,3 @@
-import {
-  getMetadata,
-  sampleRUM,
-  toCamelCase,
-  toClassName
-} from '../lib-franklin.js';
-
 /*
  * Copyright 2022 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
@@ -16,6 +9,12 @@ import {
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import {
+  getMetadata,
+  sampleRUM,
+  toCamelCase,
+  toClassName
+} from '../lib-franklin.js';
 
 export const DEFAULT_OPTIONS = {
   root: '/experiments',
@@ -23,6 +22,28 @@ export const DEFAULT_OPTIONS = {
   metaTag: 'experiment',
   queryParameter: 'experiment',
 };
+
+/**
+ * Checks if the current engine is detected as being a bot.
+ * @returns `true` if the current engine is detected as being, `false` otherwise
+ */
+function isBot() {
+  return navigator.userAgent.match(/bot|crawl|spider/i);
+}
+
+/**
+ * Gets all the metadata elements that are in the given scope.
+ * @param {String} scope The scope/prefix for the metadata
+ * @returns an array of HTMLElement nodes that match the given scope
+ */
+function getAllMetadata(scope) {
+  return [...document.head.querySelectorAll(`meta[property^="${scope}:"],meta[name^="${scope}-"]`)].map((meta) => {
+    const id = this.toClassName(meta.name
+      ? meta.name.substring(scope.length + 1)
+      : meta.getAttribute('property').split(':')[1]);
+    return { id, urls: meta.getAttribute('content').split(',').map((url) => url.trim()) };
+  });
+}
 
 /**
  * Parses the experimentation configuration sheet and creates an internal model.
@@ -85,18 +106,6 @@ function parseExperimentConfig(json) {
     console.log('error parsing experiment config:', e, json);
   }
   return null;
-}
-
-/**
- * Gets the experiment name, if any for the page based on env, useragent, queyr params
- * @returns {string} experimentid
- */
-export function getExperimentName(tagName) {
-  if (navigator.userAgent.match(/bot|crawl|spider/i)) {
-    return null;
-  }
-
-  return toClassName(getMetadata(tagName)) || null;
 }
 
 export function isValidConfig(config) {
@@ -308,6 +317,10 @@ export async function getConfig(experiment, instantExperiment, config) {
 }
 
 export async function runExperiment(customOptions = {}) {
+  if (isBot()) {
+    return null;
+  }
+
   const options = Object.assign({}, DEFAULT_OPTIONS, customOptions);
   const experiment = getMetadata('experiment');
   if (!experiment) {
@@ -416,11 +429,11 @@ window.hlx.patchBlockConfig.push((config) => {
   };
 });
 
-export async function eager(customOptions = {}) {
+export async function loadEager(customOptions = {}) {
   await runExperiment(customOptions);
 }
 
-export async function lazy(customOptions = {}) {
+export async function loadLazy(customOptions = {}) {
   const options = {
     ...DEFAULT_OPTIONS,
     ...customOptions,
