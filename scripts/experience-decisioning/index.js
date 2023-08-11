@@ -198,6 +198,7 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
   try {
     const resp = await fetch(path);
     if (!resp.ok) {
+      // eslint-disable-next-line no-console
       console.log('error loading experiment config:', resp);
       return null;
     }
@@ -213,6 +214,7 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
     config.basePath = `${cfg.root}/${experimentId}`;
     return config;
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.log(`error loading experiment manifest: ${path}`, e);
   }
   return null;
@@ -271,6 +273,7 @@ async function replaceInner(path, element) {
   try {
     const resp = await fetch(plainPath);
     if (!resp.ok) {
+      // eslint-disable-next-line no-console
       console.log('error loading experiment content:', resp);
       return false;
     }
@@ -279,6 +282,7 @@ async function replaceInner(path, element) {
     element.innerHTML = html;
     return true;
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.log(`error loading experiment content: ${plainPath}`, e);
   }
   return false;
@@ -291,6 +295,7 @@ export async function getConfig(experiment, instantExperiment, config) {
   const experimentConfig = instantExperiment
     ? await getConfigForInstantExperiment.call(this, experiment, instantExperiment)
     : await getConfigForFullExperiment.call(this, experiment, config);
+  // eslint-disable-next-line no-console
   console.debug(experimentConfig);
   if (!experimentConfig || (toCamelCase(experimentConfig.status) !== 'active' && !forcedExperiment)) {
     return null;
@@ -304,6 +309,7 @@ export async function getConfig(experiment, instantExperiment, config) {
 
   window.hlx = window.hlx || {};
   window.hlx.experiment = experimentConfig;
+  // eslint-disable-next-line no-console
   console.debug('run', experimentConfig.run, experimentConfig.audience);
   if (forcedVariant && experimentConfig.variantNames.includes(forcedVariant)) {
     experimentConfig.selectedVariant = forcedVariant;
@@ -331,12 +337,15 @@ export async function runExperiment(customOptions = {}) {
   try {
     experimentConfig = await getConfig(experiment, variants, options);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Invalid experiment config.', err);
   }
   if (!experimentConfig || !isValidConfig(experimentConfig)) {
+    // eslint-disable-next-line no-console
     console.warn('Invalid experiment config. Please review your metadata, sheet and parser.');
     return;
   }
+  // eslint-disable-next-line no-console
   console.debug(`running experiment (${window.hlx.experiment.id}) -> ${window.hlx.experiment.selectedVariant}`);
 
   if (experimentConfig.selectedVariant === experimentConfig.variantNames[0]) {
@@ -359,6 +368,7 @@ export async function runExperiment(customOptions = {}) {
   document.body.classList.add(`experiment-${experimentConfig.id}`);
   const result = await replaceInner(pages[0], document.querySelector('main'));
   if (!result) {
+    // eslint-disable-next-line no-console
     console.debug(`failed to serve variant ${window.hlx.experiment.selectedVariant}. Falling back to ${experimentConfig.variantNames[0]}.`);
   }
   document.body.classList.add(`variant-${result ? experimentConfig.selectedVariant : experimentConfig.variantNames[0]}`);
