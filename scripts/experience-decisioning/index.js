@@ -413,7 +413,7 @@ export async function serveAudience(customOptions) {
     }
     sampleRUM('audiences', {
       source: window.location.href,
-      target: forcedAudience || audiences.join(','),
+      target: result ? forcedAudience || audiences.join(',') : 'default',
     });
     return result;
   } catch (err) {
