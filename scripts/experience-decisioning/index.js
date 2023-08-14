@@ -87,7 +87,6 @@ async function replaceInner(path, element) {
  *      {
  *        id: <string>,
  *        label: <string>,
- *        blocks: [<string>]
  *        audiences: [<string>],
  *        status: Active | Inactive,
  *        variantNames: [<string>],
@@ -106,8 +105,8 @@ function parseExperimentConfig(json) {
   try {
     json.settings.data.forEach((line) => {
       const key = toCamelCase(line.Name);
-      if (key === 'audience') {
-        config.audiences = [line.Value];
+      if (key === 'audience' || key === 'audiences') {
+        config.audiences = line.Value.join(',');
       } else {
         config[key] = line.Value;
       }
