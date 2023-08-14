@@ -17,7 +17,7 @@ import {
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
 
-const audiences = {
+const AUDIENCES = { // add your custom audiences to the list
   mobile: () => window.innerWidth < 600,
   desktop: () => window.innerWidth >= 600,
 };
@@ -38,35 +38,37 @@ export function getAllMetadata(scope) {
     }, {});
 }
 
-const plugins = {
-  preview: {
-    condition: () => window.location.hostname.endsWith('hlx.page')
-      || window.location.hostname === 'localhost',
-    loadLazy: async () => {
-      const preview = await import('../tools/preview/preview.js');
-      preview.default();
-    },
+// Franklin plugins
+window.hlx.plugins = [];
+// Preview overlay
+window.hlx.plugins.push({
+  condition: () => window.location.hostname.endsWith('hlx.page')
+    || window.location.hostname === 'localhost',
+  loadLazy: async () => {
+    const preview = await import('../tools/preview/preview.js');
+    preview.default();
   },
-  experienceDecisioning: {
-    condition: () => getMetadata('experiment')
-      || Object.keys(getAllMetadata('audience')).length,
-    loadEager: async () => {
-      // eslint-disable-next-line import/no-cycle
-      const { loadEager: runEager } = await import('./experience-decisioning/index.js');
-      await runEager({ audiences });
-    },
-    loadLazy: async () => {
-      if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
-        // eslint-disable-next-line import/extensions
-        const { loadLazy: runLazy } = await import('./experience-decisioning/index.js');
-        await runLazy({ audiences });
-      }
-    },
+});
+// Experience decisioning
+window.hlx.plugins.push({
+  condition: () => getMetadata('experiment')
+    || Object.keys(getAllMetadata('audience')).length,
+  loadEager: async () => {
+    // eslint-disable-next-line import/no-cycle
+    const { loadEager: runEager } = await import('./experience-decisioning/index.js');
+    await runEager({ audiences: AUDIENCES });
   },
-};
+  loadLazy: async () => {
+    if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
+      // eslint-disable-next-line import/extensions
+      const { loadLazy: runLazy } = await import('./experience-decisioning/index.js');
+      await runLazy({ audiences: AUDIENCES });
+    }
+  },
+});
 
 async function runPlugin(phase) {
-  return Object.values(plugins)
+  return window.hlx.plugins
     .reduce((promise, plugin) => (
       plugin[phase] && (!plugin.condition || plugin.condition())
         ? promise.then(() => plugin[phase]())
