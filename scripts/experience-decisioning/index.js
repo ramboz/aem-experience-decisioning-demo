@@ -36,6 +36,51 @@ function isBot() {
 }
 
 /**
+ * Checks if any of the configured audiences on the page can be resolved.
+ * @param {string[]} configured a list of configured audiences for the page
+ * @param {object} allAudiences object defining all available audiences and their resolution logic
+ * @returns Returns the names of the resolved audiences
+ */
+async function getResolvedAudiences(configured, allAudiences) {
+  const results = await Promise.all(
+    configured
+      .map((key) => {
+        if (allAudiences[key] && typeof allAudiences[key] === 'function') {
+          return allAudiences[key]();
+        }
+        return false;
+      }),
+  );
+  return Object.keys(allAudiences).filter((_, i) => results[i]);
+}
+
+/**
+ * Replaces element with content from path
+ * @param {string} path
+ * @param {HTMLElement} element
+ * @param {boolean} isBlock
+ */
+async function replaceInner(path, element) {
+  const plainPath = `${path}.plain.html`;
+  try {
+    const resp = await fetch(plainPath);
+    if (!resp.ok) {
+      // eslint-disable-next-line no-console
+      console.log('error loading experiment content:', resp);
+      return false;
+    }
+    const html = await resp.text();
+    // eslint-disable-next-line no-param-reassign
+    element.innerHTML = html;
+    return true;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.log(`error loading experiment content: ${plainPath}`, e);
+  }
+  return false;
+}
+
+/**
  * Parses the experimentation configuration sheet and creates an internal model.
  *
  * Output model is expected to have the following structure:
@@ -102,7 +147,12 @@ function parseExperimentConfig(json) {
   return null;
 }
 
-export function isValidConfig(config) {
+/**
+ * Checs if the given config is a valid experimentation configuration.
+ * @param {object} config the config to check
+ * @returns `true` if it is valid, `false` otherwise
+ */
+export function isExperimentValidConfig(config) {
   if (!config.variantNames
     || !config.variantNames.length
     || !config.variants
@@ -241,45 +291,6 @@ function getDecisionPolicy(config) {
   return decisionPolicy;
 }
 
-async function getResolvedAudiences(configured, { audiences = {} }, defaultValue) {
-  const results = await Promise.all(
-    configured
-      .map((key) => {
-        if (audiences[key] && typeof audiences[key] === 'function') {
-          return audiences[key]();
-        }
-        return defaultValue;
-      }),
-  );
-  return Object.keys(audiences).filter((_, i) => results[i]);
-}
-
-/**
- * Replaces element with content from path
- * @param {string} path
- * @param {HTMLElement} element
- * @param {boolean} isBlock
- */
-async function replaceInner(path, element) {
-  const plainPath = `${path}.plain.html`;
-  try {
-    const resp = await fetch(plainPath);
-    if (!resp.ok) {
-      // eslint-disable-next-line no-console
-      console.log('error loading experiment content:', resp);
-      return false;
-    }
-    const html = await resp.text();
-    // eslint-disable-next-line no-param-reassign
-    element.innerHTML = html;
-    return true;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.log(`error loading experiment content: ${plainPath}`, e);
-  }
-  return false;
-}
-
 export async function getConfig(experiment, instantExperiment, config) {
   const usp = new URLSearchParams(window.location.search);
   const [forcedExperiment, forcedVariant] = usp.has(config.queryParameter) ? usp.get(config.queryParameter).split('/') : [];
@@ -294,7 +305,7 @@ export async function getConfig(experiment, instantExperiment, config) {
   }
 
   experimentConfig.run = !!forcedExperiment
-    || !!(await getResolvedAudiences(experimentConfig.audiences, config)).length;
+    || !!(await getResolvedAudiences(experimentConfig.audiences, config.audiences)).length;
   if (!experimentConfig.run) {
     return null;
   }
@@ -332,7 +343,7 @@ export async function runExperiment(customOptions = {}) {
     // eslint-disable-next-line no-console
     console.error('Invalid experiment config.', err);
   }
-  if (!experimentConfig || !isValidConfig(experimentConfig)) {
+  if (!experimentConfig || !isExperimentValidConfig(experimentConfig)) {
     // eslint-disable-next-line no-console
     console.warn('Invalid experiment config. Please review your metadata, sheet and parser.');
     return false;
@@ -378,7 +389,7 @@ export async function serveAudience(customOptions) {
 
   const options = { ...DEFAULT_OPTIONS, ...customOptions };
   const configuredAudiences = getAllMetadata(options.audiencesMetaTagPrefix);
-  const audiences = await getResolvedAudiences(Object.keys(configuredAudiences), options, false);
+  const audiences = await getResolvedAudiences(Object.keys(configuredAudiences), options.audiences);
   if (!audiences.length) {
     return null;
   }

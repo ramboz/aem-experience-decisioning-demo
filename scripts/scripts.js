@@ -20,9 +20,6 @@ const LCP_BLOCKS = []; // add your LCP blocks to the list
 const audiences = {
   mobile: () => window.innerWidth < 600,
   desktop: () => window.innerWidth >= 600,
-  customer: () => document.cookie.split('; ')
-    .find((entry) => entry.startsWith('is-customer='))
-    ?.split('=')[1] || false,
 };
 
 /**
@@ -43,7 +40,8 @@ export function getAllMetadata(scope) {
 
 const plugins = {
   preview: {
-    condition: () => window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost'),
+    condition: () => window.location.hostname.endsWith('hlx.page')
+      || window.location.hostname === 'localhost',
     loadLazy: async () => {
       const preview = await import('../tools/preview/preview.js');
       preview.default();
