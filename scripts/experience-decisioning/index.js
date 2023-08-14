@@ -406,7 +406,16 @@ export async function serveAudience(customOptions) {
 
   try {
     const url = new URL(urlString);
-    return replaceInner(url.pathname, document.querySelector('main'));
+    const result = replaceInner(url.pathname, document.querySelector('main'));
+    if (!result) {
+      // eslint-disable-next-line no-console
+      console.debug(`failed to serve audience ${forcedAudience || audiences[0]}. Falling back to default content.`);
+    }
+    sampleRUM('audiences', {
+      source: window.location.href,
+      target: forcedAudience || audiences.join(','),
+    });
+    return result;
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);
