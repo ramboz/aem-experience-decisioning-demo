@@ -51,7 +51,7 @@ async function getResolvedAudiences(configured, allAudiences) {
         return false;
       }),
   );
-  return Object.keys(allAudiences).filter((_, i) => results[i]);
+  return configured.filter((_, i) => results[i]);
 }
 
 /**
@@ -107,7 +107,7 @@ function parseExperimentConfig(json) {
     json.settings.data.forEach((line) => {
       const key = toCamelCase(line.Name);
       if (key === 'audience') {
-        config.audiences = line.Value;
+        config.audiences = [line.Value];
       } else {
         config[key] = line.Value;
       }
@@ -152,7 +152,7 @@ function parseExperimentConfig(json) {
  * @param {object} config the config to check
  * @returns `true` if it is valid, `false` otherwise
  */
-export function isExperimentValidConfig(config) {
+export function isValidExperimentationConfig(config) {
   if (!config.variantNames
     || !config.variantNames.length
     || !config.variants
@@ -343,7 +343,7 @@ export async function runExperiment(customOptions = {}) {
     // eslint-disable-next-line no-console
     console.error('Invalid experiment config.', err);
   }
-  if (!experimentConfig || !isExperimentValidConfig(experimentConfig)) {
+  if (!experimentConfig || !isValidExperimentationConfig(experimentConfig)) {
     // eslint-disable-next-line no-console
     console.warn('Invalid experiment config. Please review your metadata, sheet and parser.');
     return false;
