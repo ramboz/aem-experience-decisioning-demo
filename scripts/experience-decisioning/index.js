@@ -158,7 +158,7 @@ export function getConfigForInstantExperiment(experimentId, instantExperiment) {
       label: `Challenger ${i + 1}`,
     };
   });
-
+  inferEmptyPercentageSplits(Object.values(config.variants));
   return (config);
 }
 
@@ -198,12 +198,37 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
     config.id = experimentId;
     config.manifest = path;
     config.basePath = `${cfg.root}/${experimentId}`;
+    inferEmptyPercentageSplits(Object.values(config.variants));
     return config;
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(`error loading experiment manifest: ${path}`, e);
   }
   return null;
+}
+
+/**
+ * Calculates percentage split for variants where the percentage split is not
+ * explicitly configured.
+ * Substracts from 100 the explicitly configured percentage splits,
+ * and divides the remaining percentage, among the variants without explicit
+ * percentage split configured
+ * @param {Array} variant objects
+ */
+function inferEmptyPercentageSplits (variants) {
+  const variantsWithoutPercentage = [];
+
+  const remainingPercentage = variants.reduce((result, variant) => {
+    if (!variant.percentageSplit) {
+      variantsWithoutPercentage.push(variant);
+    }
+    const newResult = result - parseFloat(variant.percentageSplit || 0);
+    return newResult;
+  }, 1);
+  if (variantsWithoutPercentage.length) {
+    const missingPercentage = remainingPercentage / variantsWithoutPercentage.length;
+    variantsWithoutPercentage.forEach((v) => v.percentageSplit = missingPercentage.toFixed(2));
+  }
 }
 
 function getDecisionPolicy(config) {
@@ -219,13 +244,7 @@ function getDecisionPolicy(config) {
         randomizationUnit: 'DEVICE',
         treatments: Object.entries(config.variants).map(([key, props]) => ({
           id: key,
-          allocationPercentage: props.percentageSplit
-            ? parseFloat(props.percentageSplit) * 100
-            : 100 - Object.values(config.variants).reduce((result, variant) => {
-              // eslint-disable-next-line no-param-reassign
-              result -= parseFloat(variant.percentageSplit || 0) * 100;
-              return result;
-            }, 100),
+          allocationPercentage: props.percentageSplit,
         })),
       },
     }],
