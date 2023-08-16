@@ -111,6 +111,32 @@ export function isValidConfig(config) {
 }
 
 /**
+ * Calculates percentage split for variants where the percentage split is not
+ * explicitly configured.
+ * Substracts from 100 the explicitly configured percentage splits,
+ * and divides the remaining percentage, among the variants without explicit
+ * percentage split configured
+ * @param {Array} variant objects
+ */
+function inferEmptyPercentageSplits(variants) {
+  const variantsWithoutPercentage = [];
+
+  const remainingPercentage = variants.reduce((result, variant) => {
+    if (!variant.percentageSplit) {
+      variantsWithoutPercentage.push(variant);
+    }
+    const newResult = result - parseFloat(variant.percentageSplit || 0);
+    return newResult;
+  }, 1);
+  if (variantsWithoutPercentage.length) {
+    const missingPercentage = remainingPercentage / variantsWithoutPercentage.length;
+    variantsWithoutPercentage.forEach((v) => {
+      v.percentageSplit = missingPercentage.toFixed(2);
+    });
+  }
+}
+
+/**
  * Gets experiment config from the manifest and transforms it to more easily
  * consumable structure.
  *
@@ -205,30 +231,6 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
     console.log(`error loading experiment manifest: ${path}`, e);
   }
   return null;
-}
-
-/**
- * Calculates percentage split for variants where the percentage split is not
- * explicitly configured.
- * Substracts from 100 the explicitly configured percentage splits,
- * and divides the remaining percentage, among the variants without explicit
- * percentage split configured
- * @param {Array} variant objects
- */
-function inferEmptyPercentageSplits (variants) {
-  const variantsWithoutPercentage = [];
-
-  const remainingPercentage = variants.reduce((result, variant) => {
-    if (!variant.percentageSplit) {
-      variantsWithoutPercentage.push(variant);
-    }
-    const newResult = result - parseFloat(variant.percentageSplit || 0);
-    return newResult;
-  }, 1);
-  if (variantsWithoutPercentage.length) {
-    const missingPercentage = remainingPercentage / variantsWithoutPercentage.length;
-    variantsWithoutPercentage.forEach((v) => v.percentageSplit = missingPercentage.toFixed(2));
-  }
 }
 
 function getDecisionPolicy(config) {
@@ -453,6 +455,6 @@ export async function loadLazy(customOptions = {}) {
     ...DEFAULT_OPTIONS,
     ...customOptions,
   };
-  const preview = await import(`./preview.js`);
+  const preview = await import('./preview.js');
   preview.default(options);
 }
