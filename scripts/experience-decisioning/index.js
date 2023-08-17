@@ -449,7 +449,7 @@ function adjustedRumSamplingRate(customOptions) {
     sampleRUM.drain('stash', sampleRUM);
     sendPing(data);
     return true;
-  }
+  };
 }
 
 export async function loadEager(customOptions = {}) {
