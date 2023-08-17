@@ -52,8 +52,7 @@ const bigcountformat = {
 function createVariant(experiment, variantName, config, options) {
   const selectedVariant = config?.selectedVariant || config?.variantNames[0];
   const variant = config.variants[variantName];
-  const split = +variant.percentageSplit
-    || 1 - config.variantNames.reduce((c, vn) => c + +config.variants[vn].percentageSplit, 0);
+  const split = variant.percentageSplit;
   const percentage = percentformat.format(split);
 
   const experimentURL = new URL(window.location.href);
