@@ -50,7 +50,8 @@ export function sampleRUM(checkpoint, data = {}) {
       window.hlx.rum = { weight, id, random, isSelected, sampleRUM, sanitizeURL: urlSanitizers[window.hlx.RUM_MASK_URL || 'path'] };
     }
     const { weight, id } = window.hlx.rum;
-    if (window.hlx && window.hlx.rum && window.hlx.rum.isSelected) {
+    if ((window.hlx && window.hlx.rum && window.hlx.rum.isSelected)
+      || sampleRUM.cases[checkpoint]) {
       const sendPing = (pdata = data) => {
         // eslint-disable-next-line object-curly-newline, max-len, no-use-before-define
         const body = JSON.stringify({ weight, id, referer: window.hlx.rum.sanitizeURL(), checkpoint, ...data });
@@ -71,7 +72,7 @@ export function sampleRUM(checkpoint, data = {}) {
         },
       };
       sendPing(data);
-      if (sampleRUM.cases[checkpoint]) { sampleRUM.cases[checkpoint](); }
+      if (sampleRUM.cases[checkpoint]) { sampleRUM.cases[checkpoint](data, sendPing); }
     }
   } catch (error) {
     // something went wrong

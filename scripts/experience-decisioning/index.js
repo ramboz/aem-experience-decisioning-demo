@@ -25,6 +25,7 @@ export const DEFAULT_OPTIONS = {
   configFile: 'manifest.json',
   metaTag: 'experiment',
   queryParameter: 'experiment',
+  rumSamplingRate: 10, // 1 in 10 requests
 };
 
 /**
@@ -169,21 +170,37 @@ export function isValidExperimentationConfig(config) {
 }
 
 /**
- * Gets experiment config from the manifest and transforms it to more easily
- * consumable structure.
+ * Calculates percentage split for variants where the percentage split is not
+ * explicitly configured.
+ * Substracts from 100 the explicitly configured percentage splits,
+ * and divides the remaining percentage, among the variants without explicit
+ * percentage split configured
+ * @param {Array} variant objects
+ */
+function inferEmptyPercentageSplits(variants) {
+  const variantsWithoutPercentage = [];
+
+  const remainingPercentage = variants.reduce((result, variant) => {
+    if (!variant.percentageSplit) {
+      variantsWithoutPercentage.push(variant);
+    }
+    const newResult = result - parseFloat(variant.percentageSplit || 0);
+    return newResult;
+  }, 1);
+  if (variantsWithoutPercentage.length) {
+    const missingPercentage = remainingPercentage / variantsWithoutPercentage.length;
+    variantsWithoutPercentage.forEach((v) => {
+      v.percentageSplit = missingPercentage.toFixed(2);
+    });
+  }
+}
+
+/**
+ * Gets experiment config from the metadata.
  *
- * the manifest consists of two sheets "settings" and "experiences", by default
- *
- * "settings" is applicable to the entire test and contains information
- * like "Audience", "Status" or "Blocks".
- *
- * "experience" hosts the experiences in rows, consisting of:
- * a "Percentage Split", "Label" and a set of "Links".
- *
- *
- * @param {string} experimentId
- * @param {object} cfg
- * @returns {object} containing the experiment manifest
+ * @param {string} experimentId The experiment identifier
+ * @param {string} instantExperiment The list of varaints
+ * @returns {object} the experiment manifest
  */
 export function getConfigForInstantExperiment(experimentId, instantExperiment) {
   const config = {
@@ -216,7 +233,7 @@ export function getConfigForInstantExperiment(experimentId, instantExperiment) {
       label: `Challenger ${i + 1}`,
     };
   });
-
+  inferEmptyPercentageSplits(Object.values(config.variants));
   return (config);
 }
 
@@ -233,12 +250,12 @@ export function getConfigForInstantExperiment(experimentId, instantExperiment) {
  * a "Percentage Split", "Label" and a set of "Links".
  *
  *
- * @param {string} experimentId
- * @param {object} cfg
+ * @param {string} experimentId The experiment identifier
+ * @param {object} pluginOptions The plugin options
  * @returns {object} containing the experiment manifest
  */
-export async function getConfigForFullExperiment(experimentId, cfg) {
-  const path = `${cfg.root}/${experimentId}/${cfg.configFile}`;
+export async function getConfigForFullExperiment(experimentId, pluginOptions) {
+  const path = `${pluginOptions.root}/${experimentId}/${pluginOptions.configFile}`;
   try {
     const resp = await fetch(path);
     if (!resp.ok) {
@@ -247,15 +264,16 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
       return null;
     }
     const json = await resp.json();
-    const config = cfg.parser
-      ? cfg.parser.call(this, json)
+    const config = pluginOptions.parser
+      ? pluginOptions.parser.call(this, json)
       : parseExperimentConfig.call(this, json);
     if (!config) {
       return null;
     }
     config.id = experimentId;
     config.manifest = path;
-    config.basePath = `${cfg.root}/${experimentId}`;
+    config.basePath = `${pluginOptions.root}/${experimentId}`;
+    inferEmptyPercentageSplits(Object.values(config.variants));
     return config;
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -277,13 +295,7 @@ function getDecisionPolicy(config) {
         randomizationUnit: 'DEVICE',
         treatments: Object.entries(config.variants).map(([key, props]) => ({
           id: key,
-          allocationPercentage: props.percentageSplit
-            ? parseFloat(props.percentageSplit) * 100
-            : 100 - Object.values(config.variants).reduce((result, variant) => {
-              // eslint-disable-next-line no-param-reassign
-              result -= parseFloat(variant.percentageSplit || 0) * 100;
-              return result;
-            }, 100),
+          allocationPercentage: props.percentageSplit,
         })),
       },
     }],
@@ -291,13 +303,24 @@ function getDecisionPolicy(config) {
   return decisionPolicy;
 }
 
-export async function getConfig(experiment, instantExperiment, config) {
+export async function getConfig(experiment, instantExperiment, pluginOptions) {
   const usp = new URLSearchParams(window.location.search);
-  const [forcedExperiment, forcedVariant] = usp.has(config.queryParameter) ? usp.get(config.queryParameter).split('/') : [];
+  const [forcedExperiment, forcedVariant] = usp.has(pluginOptions.queryParameter)
+    ? usp.get(pluginOptions.queryParameter).split('/')
+    : [];
 
   const experimentConfig = instantExperiment
-    ? await getConfigForInstantExperiment.call(this, experiment, instantExperiment)
-    : await getConfigForFullExperiment.call(this, experiment, config);
+    ? await getConfigForInstantExperiment(experiment, instantExperiment)
+    : await getConfigForFullExperiment(experiment, pluginOptions);
+
+  const forcedAudience = usp.has(pluginOptions.audiencesQueryParameter)
+    ? toClassName(usp.get(pluginOptions.audiencesQueryParameter))
+    : null;
+
+  if (forcedAudience && !experimentConfig.audiences.includes(forcedAudience)) {
+    return null;
+  }
+
   // eslint-disable-next-line no-console
   console.debug(experimentConfig);
   if (!experimentConfig || (toCamelCase(experimentConfig.status) !== 'active' && !forcedExperiment)) {
@@ -306,7 +329,7 @@ export async function getConfig(experiment, instantExperiment, config) {
 
   experimentConfig.run = !!forcedExperiment
     || !experimentConfig.audiences.length
-    || !!(await getResolvedAudiences(experimentConfig.audiences, config.audiences)).length;
+    || !!(await getResolvedAudiences(experimentConfig.audiences, pluginOptions.audiences)).length;
   if (!experimentConfig.run) {
     return null;
   }
@@ -331,7 +354,7 @@ export async function runExperiment(customOptions = {}) {
     return false;
   }
 
-  const options = { ...DEFAULT_OPTIONS, ...customOptions };
+  const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
   const experiment = getMetadata('experiment');
   if (!experiment) {
     return false;
@@ -339,7 +362,7 @@ export async function runExperiment(customOptions = {}) {
   const variants = getMetadata('instant-experiment') || getMetadata('experiment-variants');
   let experimentConfig;
   try {
-    experimentConfig = await getConfig(experiment, variants, options);
+    experimentConfig = await getConfig(experiment, variants, pluginOptions);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Invalid experiment config.', err);
@@ -388,16 +411,19 @@ export async function serveAudience(customOptions) {
     return null;
   }
 
-  const options = { ...DEFAULT_OPTIONS, ...customOptions };
-  const configuredAudiences = getAllMetadata(options.audiencesMetaTagPrefix);
-  const audiences = await getResolvedAudiences(Object.keys(configuredAudiences), options.audiences);
+  const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
+  const configuredAudiences = getAllMetadata(pluginOptions.audiencesMetaTagPrefix);
+  const audiences = await getResolvedAudiences(
+    Object.keys(configuredAudiences),
+    pluginOptions.audiences,
+  );
   if (!audiences.length) {
     return null;
   }
 
   const usp = new URLSearchParams(window.location.search);
-  const forcedAudience = usp.has(options.audiencesQueryParameter)
-    ? toClassName(usp.get(options.audiencesQueryParameter))
+  const forcedAudience = usp.has(pluginOptions.audiencesQueryParameter)
+    ? toClassName(usp.get(pluginOptions.audiencesQueryParameter))
     : null;
 
   const urlString = configuredAudiences[forcedAudience || audiences[0]];
@@ -484,16 +510,31 @@ window.hlx.patchBlockConfig.push((config) => {
   };
 });
 
+function adjustedRumSamplingRate(customOptions) {
+  const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
+  return (data, sendPing) => {
+    // track experiments with higher sampling rate
+    window.hlx.rum.weight = Math.min(window.hlx.rum.weight, pluginOptions.rumSamplingRate);
+    window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
+
+    sampleRUM.drain('stash', sampleRUM);
+    sendPing(data);
+    return true;
+  }
+}
+
 export async function loadEager(customOptions = {}) {
+  sampleRUM.cases ||= {};
+  sampleRUM.cases.experiment = adjustedRumSamplingRate(customOptions);
   await runExperiment(customOptions);
   await serveAudience(customOptions);
 }
 
 export async function loadLazy(customOptions = {}) {
-  const options = {
+  const pluginOptions = {
     ...DEFAULT_OPTIONS,
     ...customOptions,
   };
   const preview = await import('./preview.js');
-  preview.default(options);
+  preview.default(pluginOptions);
 }
