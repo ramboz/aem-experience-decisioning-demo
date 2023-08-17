@@ -41,7 +41,7 @@ function isBot() {
  * @param {object} allAudiences object defining all available audiences and their resolution logic
  * @returns Returns the names of the resolved audiences
  */
-async function getResolvedAudiences(configured, allAudiences) {
+async function getResolvedAudiences(configured = [], allAudiences = {}) {
   const results = await Promise.all(
     configured
       .map((key) => {
@@ -87,6 +87,7 @@ async function replaceInner(path, element) {
  *      {
  *        id: <string>,
  *        label: <string>,
+ *        blocks: <string>,
  *        audiences: [<string>],
  *        status: Active | Inactive,
  *        variantNames: [<string>],
@@ -147,7 +148,7 @@ function parseExperimentConfig(json) {
 }
 
 /**
- * Checs if the given config is a valid experimentation configuration.
+ * Checks if the given config is a valid experimentation configuration.
  * @param {object} config the config to check
  * @returns `true` if it is valid, `false` otherwise
  */
@@ -304,6 +305,7 @@ export async function getConfig(experiment, instantExperiment, config) {
   }
 
   experimentConfig.run = !!forcedExperiment
+    || !experimentConfig.audiences.length
     || !!(await getResolvedAudiences(experimentConfig.audiences, config.audiences)).length;
   if (!experimentConfig.run) {
     return null;
