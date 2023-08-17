@@ -250,6 +250,21 @@ function getDecisionPolicy(config) {
 }
 
 /**
+ * this is an extensible stub to take on audience mappings
+ * @param {string} audience
+ * @return {boolean} is member of this audience
+ */
+function isValidAudience(audience) {
+  if (audience === 'mobile') {
+    return window.innerWidth < 600;
+  }
+  if (audience === 'desktop') {
+    return window.innerWidth >= 600;
+  }
+  return true;
+}
+
+/**
  * Replaces element with content from path
  * @param {string} path
  * @param {HTMLElement} element
@@ -317,7 +332,7 @@ export async function runExperiment(customOptions = {}) {
   }
 
   const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
-  const experiment = getMetadata(options.experimentsMetaTag);
+  const experiment = getMetadata(pluginOptions.experimentsMetaTag);
   if (!experiment) {
     return false;
   }
@@ -472,7 +487,7 @@ function adjustedRumSamplingRate(customOptions) {
     sampleRUM.drain('stash', sampleRUM);
     sendPing(data);
     return true;
-  }
+  };
 }
 
 export async function loadEager(customOptions = {}) {
