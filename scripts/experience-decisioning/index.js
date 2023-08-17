@@ -138,21 +138,11 @@ function inferEmptyPercentageSplits(variants) {
 }
 
 /**
- * Gets experiment config from the manifest and transforms it to more easily
- * consumable structure.
+ * Gets experiment config from the metadata.
  *
- * the manifest consists of two sheets "settings" and "experiences", by default
- *
- * "settings" is applicable to the entire test and contains information
- * like "Audience", "Status" or "Blocks".
- *
- * "experience" hosts the experiences in rows, consisting of:
- * a "Percentage Split", "Label" and a set of "Links".
- *
- *
- * @param {string} experimentId
- * @param {object} cfg
- * @returns {object} containing the experiment manifest
+ * @param {string} experimentId The experiment identifier
+ * @param {string} instantExperiment The list of varaints
+ * @returns {object} the experiment manifest
  */
 export function getConfigForInstantExperiment(experimentId, instantExperiment) {
   const config = {
@@ -202,12 +192,12 @@ export function getConfigForInstantExperiment(experimentId, instantExperiment) {
  * a "Percentage Split", "Label" and a set of "Links".
  *
  *
- * @param {string} experimentId
- * @param {object} cfg
+ * @param {string} experimentId The experiment identifier
+ * @param {object} pluginOptions The plugin options
  * @returns {object} containing the experiment manifest
  */
-export async function getConfigForFullExperiment(experimentId, cfg) {
-  const path = `${cfg.root}/${experimentId}/${cfg.configFile}`;
+export async function getConfigForFullExperiment(experimentId, pluginOptions) {
+  const path = `${pluginOptions.root}/${experimentId}/${pluginOptions.configFile}`;
   try {
     const resp = await fetch(path);
     if (!resp.ok) {
@@ -216,15 +206,15 @@ export async function getConfigForFullExperiment(experimentId, cfg) {
       return null;
     }
     const json = await resp.json();
-    const config = cfg.parser
-      ? cfg.parser.call(this, json)
+    const config = pluginOptions.parser
+      ? pluginOptions.parser.call(this, json)
       : parseExperimentConfig.call(this, json);
     if (!config) {
       return null;
     }
     config.id = experimentId;
     config.manifest = path;
-    config.basePath = `${cfg.root}/${experimentId}`;
+    config.basePath = `${pluginOptions.root}/${experimentId}`;
     inferEmptyPercentageSplits(Object.values(config.variants));
     return config;
   } catch (e) {
@@ -296,13 +286,15 @@ async function replaceInner(path, element) {
   return false;
 }
 
-export async function getConfig(experiment, instantExperiment, config) {
+export async function getConfig(experiment, instantExperiment, pluginOptions) {
   const usp = new URLSearchParams(window.location.search);
-  const [forcedExperiment, forcedVariant] = usp.has(config.queryParameter) ? usp.get(config.queryParameter).split('/') : [];
+  const [forcedExperiment, forcedVariant] = usp.has(pluginOptions.queryParameter)
+    ? usp.get(pluginOptions.queryParameter).split('/')
+    : [];
 
   const experimentConfig = instantExperiment
-    ? await getConfigForInstantExperiment.call(this, experiment, instantExperiment)
-    : await getConfigForFullExperiment.call(this, experiment, config);
+    ? await getConfigForInstantExperiment(experiment, instantExperiment)
+    : await getConfigForFullExperiment(experiment, pluginOptions);
   // eslint-disable-next-line no-console
   console.debug(experimentConfig);
   if (!experimentConfig || (toCamelCase(experimentConfig.status) !== 'active' && !forcedExperiment)) {
@@ -335,7 +327,7 @@ export async function runExperiment(customOptions = {}) {
     return false;
   }
 
-  const options = { ...DEFAULT_OPTIONS, ...customOptions };
+  const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
   const experiment = getMetadata('experiment');
   if (!experiment) {
     return false;
@@ -343,7 +335,7 @@ export async function runExperiment(customOptions = {}) {
   const variants = getMetadata('instant-experiment') || getMetadata('experiment-variants');
   let experimentConfig;
   try {
-    experimentConfig = await getConfig(experiment, variants, options);
+    experimentConfig = await getConfig(experiment, variants, pluginOptions);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Invalid experiment config.', err);
@@ -448,10 +440,10 @@ window.hlx.patchBlockConfig.push((config) => {
 });
 
 function adjustedRumSamplingRate(customOptions) {
-  const options = { ...DEFAULT_OPTIONS, ...customOptions };
+  const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
   return (data, sendPing) => {
     // track experiments with higher sampling rate
-    window.hlx.rum.weight = Math.min(window.hlx.rum.weight, options.rumSamplingRate);
+    window.hlx.rum.weight = Math.min(window.hlx.rum.weight, pluginOptions.rumSamplingRate);
     window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
 
     sampleRUM.drain('stash', sampleRUM);
@@ -467,10 +459,10 @@ export async function loadEager(customOptions = {}) {
 }
 
 export async function loadLazy(customOptions = {}) {
-  const options = {
+  const pluginOptions = {
     ...DEFAULT_OPTIONS,
     ...customOptions,
   };
   const preview = await import('./preview.js');
-  preview.default(options);
+  preview.default(pluginOptions);
 }
