@@ -21,6 +21,7 @@ export const DEFAULT_OPTIONS = {
   configFile: 'manifest.json',
   metaTag: 'experiment',
   queryParameter: 'experiment',
+  rumSamplingRate: 10, // 1 in 10 requests
 };
 
 /**
@@ -446,7 +447,22 @@ window.hlx.patchBlockConfig.push((config) => {
   };
 });
 
+function adjustedRumSamplingRate(customOptions) {
+  const options = { ...DEFAULT_OPTIONS, ...customOptions };
+  return (data, sendPing) => {
+    // track experiments with higher sampling rate
+    window.hlx.rum.weight = Math.min(window.hlx.rum.weight, options.rumSamplingRate);
+    window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
+
+    sampleRUM.drain('stash', sampleRUM);
+    sendPing(data);
+    return true;
+  }
+}
+
 export async function loadEager(customOptions = {}) {
+  sampleRUM.cases ||= {};
+  sampleRUM.cases.experiment = adjustedRumSamplingRate(customOptions);
   await runExperiment(customOptions);
 }
 
