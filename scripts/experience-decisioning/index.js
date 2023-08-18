@@ -327,9 +327,13 @@ export async function getConfig(experiment, instantExperiment, pluginOptions) {
     return null;
   }
 
+  experimentConfig.resolvedAudiences = await getResolvedAudiences(
+    experimentConfig.audiences,
+    pluginOptions.audiences,
+  );
   experimentConfig.run = !!forcedExperiment
     || !experimentConfig.audiences.length
-    || !!(await getResolvedAudiences(experimentConfig.audiences, pluginOptions.audiences)).length;
+    || !!(experimentConfig.resolvedAudiences).length;
   if (!experimentConfig.run) {
     return null;
   }
