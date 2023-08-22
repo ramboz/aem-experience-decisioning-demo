@@ -5,11 +5,11 @@
       "id": "experience-decisioning-ui",
       "title": "Experience Decisioning",
       "environments": [
-        "edit"
+        "edit",
+        "preview"
       ],
       "url": "https://exd-ui--franklin-experience-decisioning--ramboz.hlx.page/tools/sidekick/exd-ui.html",
       "isPalette": true,
-      "includePaths": [ "**.docx**" ],
       "paletteRect": "top: 50px; bottom: 10px; right: 10px; left: auto; width:400px; height: calc(100vh - 60px)"
     }
   ]
