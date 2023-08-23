@@ -1,12 +1,3 @@
-import {
-  getMetadata,
-  toClassName,
-} from '../lib-franklin.js';
-
-import {
-  createPopupButton,
-  getOverlay,
-} from '../../tools/preview/preview.js';
 /*
  * Copyright 2022 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
@@ -18,6 +9,16 @@ import {
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+
+import {
+  getMetadata,
+  toClassName,
+} from '../lib-franklin.js';
+
+import {
+  createPopupButton,
+  getOverlay,
+} from '../../tools/preview/preview.js';
 
 const percentformat = new Intl.NumberFormat('en-US', { style: 'percent', maximumSignificantDigits: 2 });
 const countformat = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2 });
