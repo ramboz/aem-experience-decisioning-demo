@@ -466,3 +466,19 @@ export async function loadLazy(customOptions = {}) {
   const preview = await import('./preview.js');
   preview.default(pluginOptions);
 }
+
+window.addEventListener('message', (ev) => {
+  try {
+    const json = JSON.parse(ev.data);
+    if (!json.type === 'exd-get-config') {
+      return;
+    }
+    const sk = document.querySelector('helix-sidekick');
+    sk.shadowRoot.querySelector('iframe').contentWindow.postMessage(JSON.stringify({
+      type: 'exd-config',
+      config: window.hlx.experiment,
+    }), 'https://245265-franklinexd-stage.adobeio-static.net');
+  } catch (err) {
+    // ignore invalid messages
+  }
+});
