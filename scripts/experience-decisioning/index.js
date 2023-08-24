@@ -470,14 +470,17 @@ export async function loadLazy(customOptions = {}) {
 window.addEventListener('message', (ev) => {
   try {
     const json = JSON.parse(ev.data);
-    if (!json.type === 'exd-get-config') {
-      return;
+    if (json.type === 'exd-get-config') {
+      const sk = document.querySelector('helix-sidekick');
+      sk.shadowRoot.querySelector('iframe').contentWindow.postMessage(JSON.stringify({
+        type: 'exd-config',
+        config: window.hlx.experiment,
+      }), 'https://245265-franklinexd-stage.adobeio-static.net');
+    } else if (json.type === 'exd-experiment-simulate') {
+      const experimentURL = new URL(window.location.href);
+      experimentURL.searchParams.set('experiment', `${json.experiment}/${json.variant}`);
+      window.location.replace(experimentURL);
     }
-    const sk = document.querySelector('helix-sidekick');
-    sk.shadowRoot.querySelector('iframe').contentWindow.postMessage(JSON.stringify({
-      type: 'exd-config',
-      config: window.hlx.experiment,
-    }), 'https://245265-franklinexd-stage.adobeio-static.net');
   } catch (err) {
     // ignore invalid messages
   }
