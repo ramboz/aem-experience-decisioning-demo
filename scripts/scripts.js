@@ -9,12 +9,34 @@ import {
   decorateBlocks,
   decorateTemplateAndTheme,
   getMetadata,
+  toClassName,
   waitForLCP,
   loadBlocks,
   loadCSS,
 } from './lib-franklin.js';
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
+
+const AUDIENCES = { // add your custom audiences to the list
+  mobile: () => window.innerWidth < 600,
+  desktop: () => window.innerWidth >= 600,
+};
+
+/**
+ * Gets all the metadata elements that are in the given scope.
+ * @param {String} scope The scope/prefix for the metadata
+ * @returns an array of HTMLElement nodes that match the given scope
+ */
+export function getAllMetadata(scope) {
+  return [...document.head.querySelectorAll(`meta[property^="${scope}:"],meta[name^="${scope}-"]`)]
+    .reduce((res, meta) => {
+      const id = toClassName(meta.name
+        ? meta.name.substring(scope.length + 1)
+        : meta.getAttribute('property').split(':')[1]);
+      res[id] = meta.getAttribute('content');
+      return res;
+    }, {});
+}
 
 // Franklin plugins
 window.hlx.plugins = [];
@@ -29,17 +51,18 @@ window.hlx.plugins.push({
 });
 // Experience decisioning
 window.hlx.plugins.push({
-  condition: () => getMetadata('experiment') || getMetadata('instant-experiment'),
+  condition: () => getMetadata('experiment')
+    || Object.keys(getAllMetadata('audience')).length,
   loadEager: async () => {
     // eslint-disable-next-line import/no-cycle
     const { loadEager: runEager } = await import('./experience-decisioning/index.js');
-    await runEager();
+    await runEager({ audiences: AUDIENCES });
   },
   loadLazy: async () => {
     if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
       // eslint-disable-next-line import/extensions
       const { loadLazy: runLazy } = await import('./experience-decisioning/index.js');
-      await runLazy();
+      await runLazy({ audiences: AUDIENCES });
     }
   },
 });

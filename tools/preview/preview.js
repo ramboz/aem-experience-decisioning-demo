@@ -1,4 +1,3 @@
-import { loadCSS } from '../../scripts/lib-franklin.js';
 /*
  * Copyright 2022 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
@@ -10,6 +9,7 @@ import { loadCSS } from '../../scripts/lib-franklin.js';
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { loadCSS } from '../../scripts/lib-franklin.js';
 
 function createPreviewOverlay(cls) {
   const overlay = document.createElement('div');
