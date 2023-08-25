@@ -433,6 +433,25 @@ export async function runCampaign(customOptions) {
     return null;
   }
 
+  const forcedAudience = usp.has(options.audiencesQueryParameter)
+    ? toClassName(usp.get(options.audiencesQueryParameter))
+    : null;
+  const audiences = getMetadata('campaign-audience').split(',').map(toClassName);
+
+  if (forcedAudience && !audiences.includes(forcedAudience)) {
+    return null;
+  }
+
+  if (audiences.length) {
+    const resolvedAudiences = await getResolvedAudiences(
+      audiences,
+      options.audiences,
+    );
+    if (!resolvedAudiences.length) {
+      return false;
+    }
+  }
+
   const allowedCampaigns = getAllMetadata(options.campaignsMetaTagPrefix);
   if (!Object.keys(allowedCampaigns).includes(campaign)) {
     return null;
