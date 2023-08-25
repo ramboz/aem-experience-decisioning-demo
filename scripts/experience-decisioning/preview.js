@@ -264,7 +264,7 @@ async function decorateAudiencesPill(overlay, options) {
       label: 'Audiences for this page:',
     },
     [
-      createAudience('default', !forcedAudience, options),
+      createAudience('default', !forcedAudience || forcedAudience === 'default', options),
       ...Object.keys(audiences)
         .filter((a) => a !== 'audience')
         .map((a) => createAudience(a, forcedAudience === a, options)),
