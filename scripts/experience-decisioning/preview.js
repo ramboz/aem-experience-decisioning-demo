@@ -266,9 +266,10 @@ async function decorateCampaignPill(overlay, options) {
   const audiences = campaigns.audience.split(',').map(toClassName);
   const resolvedAudiences = await getResolvedAudiences(audiences, options);
   const isActive = forcedAudience ? audiences.includes(forcedAudience) : !!resolvedAudiences.length;
-  const campaign = usp.has(options.campaignsQueryParameter)
+  const campaign = (usp.has(options.campaignsQueryParameter)
     ? toClassName(usp.get(options.campaignsQueryParameter))
-    : null;
+    : null)
+    || (usp.has('utm_campaign') ? toClassName(usp.get('utm_campaign')) : null);
   const pill = createPopupButton(
     `Campaign: ${campaign || 'default'}`,
     {

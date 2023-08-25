@@ -28,7 +28,7 @@ export const DEFAULT_OPTIONS = {
 
   // Campaigns related properties
   campaignsMetaTagPrefix: 'campaign',
-  campaignsQueryParameter: 'campaign',
+  campaignsQueryParameter: 'campaign', // TODO: also support `utm_campaign`
 
   // Experimentation related properties
   experimentsRoot: '/experiments',
@@ -442,9 +442,10 @@ export async function runCampaign(customOptions) {
 
   const options = { ...DEFAULT_OPTIONS, ...customOptions };
   const usp = new URLSearchParams(window.location.search);
-  const campaign = usp.has(options.campaignsQueryParameter)
+  const campaign = (usp.has(options.campaignsQueryParameter)
     ? toClassName(usp.get(options.campaignsQueryParameter))
-    : null;
+    : null)
+    || (usp.has('utm_campaign') ? toClassName(usp.get('utm_campaign')) : null);
   if (!campaign) {
     return null;
   }
