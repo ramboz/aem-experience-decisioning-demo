@@ -617,6 +617,7 @@ export async function loadLazy(customOptions = {}) {
     ...DEFAULT_OPTIONS,
     ...customOptions,
   };
+  // eslint-disable-next-line import/no-cycle
   const preview = await import('./preview.js');
   preview.default(pluginOptions);
 }
