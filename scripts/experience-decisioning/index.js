@@ -47,21 +47,35 @@ function isBot() {
 
 /**
  * Checks if any of the configured audiences on the page can be resolved.
- * @param {string[]} configured a list of configured audiences for the page
- * @param {object} allAudiences object defining all available audiences and their resolution logic
- * @returns Returns the names of the resolved audiences
+ * @param {string[]} applicableAudiences a list of configured audiences for the page
+ * @param {object} options the plugin options
+ * @returns Returns the names of the resolved audiences, or `null` if no audience is configured
  */
-export async function getResolvedAudiences(configured = [], allAudiences = {}) {
+export async function getResolvedAudiences(applicableAudiences, options) {
+  if (!applicableAudiences.length || !Object.keys(options.audiences).length) {
+    return null;
+  }
+  // If we have a forced audience set in the query parameters (typically for simulation purposes)
+  // we check if it is applicable
+  const usp = new URLSearchParams(window.location.search);
+  const forcedAudience = usp.has(options.audiencesQueryParameter)
+    ? toClassName(usp.get(options.audiencesQueryParameter))
+    : null;
+  if (forcedAudience) {
+    return applicableAudiences.includes(forcedAudience) ? [forcedAudience] : [];
+  }
+
+  // Otherwise, return the list of audiences that are resolved on the page
   const results = await Promise.all(
-    configured
+    applicableAudiences
       .map((key) => {
-        if (allAudiences[key] && typeof allAudiences[key] === 'function') {
-          return allAudiences[key]();
+        if (options.audiences[key] && typeof options.audiences[key] === 'function') {
+          return options.audiences[key]();
         }
         return false;
       }),
   );
-  return configured.filter((_, i) => results[i]);
+  return applicableAudiences.filter((_, i) => results[i]);
 }
 
 /**
@@ -322,33 +336,35 @@ export async function getConfig(experiment, instantExperiment, pluginOptions) {
     ? await getConfigForInstantExperiment(experiment, instantExperiment)
     : await getConfigForFullExperiment(experiment, pluginOptions);
 
+  // eslint-disable-next-line no-console
+  console.debug(experimentConfig);
+  if (!experimentConfig) {
+    return null;
+  }
+
   const forcedAudience = usp.has(pluginOptions.audiencesQueryParameter)
     ? toClassName(usp.get(pluginOptions.audiencesQueryParameter))
     : null;
 
-  if (forcedAudience && !experimentConfig.audiences.includes(forcedAudience)) {
-    return null;
-  }
-
-  // eslint-disable-next-line no-console
-  console.debug(experimentConfig);
-  if (!experimentConfig || (toCamelCase(experimentConfig.status) !== 'active' && !forcedExperiment)) {
-    return null;
-  }
-
   experimentConfig.resolvedAudiences = await getResolvedAudiences(
     experimentConfig.audiences,
-    pluginOptions.audiences,
+    pluginOptions,
   );
-  experimentConfig.run = !!forcedExperiment
-    || !experimentConfig.audiences.length
-    || !!(experimentConfig.resolvedAudiences).length;
-  if (!experimentConfig.run) {
-    return null;
-  }
+  experimentConfig.run = (
+    // experiment is active or forced
+    (toCamelCase(experimentConfig.status) === 'active' || forcedExperiment)
+    // experiment has resolved audiences if configured
+    && (!experimentConfig.resolvedAudiences || experimentConfig.resolvedAudiences.length)
+    // forced audience resolves if defined
+    && (!forcedAudience || experimentConfig.audiences.includes(forcedAudience))
+  );
 
   window.hlx = window.hlx || {};
   window.hlx.experiment = experimentConfig;
+  if (!experimentConfig.run) {
+    return false;
+  }
+
   // eslint-disable-next-line no-console
   console.debug('run', experimentConfig.run, experimentConfig.audiences);
   if (forcedVariant && experimentConfig.variantNames.includes(forcedVariant)) {
@@ -433,23 +449,10 @@ export async function runCampaign(customOptions) {
     return null;
   }
 
-  const forcedAudience = usp.has(options.audiencesQueryParameter)
-    ? toClassName(usp.get(options.audiencesQueryParameter))
-    : null;
   const audiences = getMetadata('campaign-audience').split(',').map(toClassName);
-
-  if (forcedAudience && !audiences.includes(forcedAudience)) {
-    return null;
-  }
-
-  if (!forcedAudience && audiences.length) {
-    const resolvedAudiences = await getResolvedAudiences(
-      audiences,
-      options.audiences,
-    );
-    if (!resolvedAudiences.length) {
-      return false;
-    }
+  const resolvedAudiences = await getResolvedAudiences(audiences, options);
+  if (!!resolvedAudiences && !resolvedAudiences.length) {
+    return false;
   }
 
   const allowedCampaigns = getAllMetadata(options.campaignsMetaTagPrefix);
@@ -488,11 +491,15 @@ export async function serveAudience(customOptions) {
 
   const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
   const configuredAudiences = getAllMetadata(pluginOptions.audiencesMetaTagPrefix);
+  if (!Object.keys(configuredAudiences).length) {
+    return null;
+  }
+
   const audiences = await getResolvedAudiences(
     Object.keys(configuredAudiences),
-    pluginOptions.audiences,
+    pluginOptions,
   );
-  if (!audiences.length) {
+  if (!audiences || !audiences.length) {
     return null;
   }
 
