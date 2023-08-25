@@ -214,7 +214,7 @@ async function decorateExperimentPill(overlay) {
       label: config.label,
       description: `
         <div class="hlx-details">
-          ${config.status}${config.resolvedAudiences.length ? ', ' : ''}${config.resolvedAudiences[0]}${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}${config.variants[config.variantNames[0]].blocks.join(',')}
+          ${config.status}${config.resolvedAudiences ? ', ' : ''}${config.resolvedAudiences.length ? config.resolvedAudiences[0] : 'No audience resolved'}${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}${config.variants[config.variantNames[0]].blocks.join(',')}
         </div>
         <div class="hlx-info">How is it going?</div>`,
       actions: config.manifest ? [{ label: 'Manifest', href: config.manifest }] : [],
