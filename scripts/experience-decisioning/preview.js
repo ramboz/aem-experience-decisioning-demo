@@ -19,6 +19,8 @@ import {
   createPopupButton,
   getOverlay,
 } from '../../tools/preview/preview.js';
+// eslint-disable-next-line import/no-cycle
+import { getAllMetadata } from '../scripts.js';
 
 const percentformat = new Intl.NumberFormat('en-US', { style: 'percent', maximumSignificantDigits: 2 });
 const countformat = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2 });
@@ -231,13 +233,58 @@ async function decorateExperimentPill(overlay) {
   populatePerformanceMetrics(pill, config, performanceMetrics);
 }
 
+function createAudience(audience, isSelected, options) {
+  const url = new URL(window.location.href);
+  url.searchParams.set(options.audiencesQueryParameter, audience);
+
+  return {
+    label: `<code>${audience}</code>`,
+    actions: [{ label: 'Simulate', href: url.href }],
+    isSelected,
+  };
+}
+
+/**
+ * Create Badge if a Page is enlisted in a Franklin Campign
+ * @return {Object} returns a badge or empty string
+ */
+async function decorateAudiencesPill(overlay, options) {
+  const audiences = getAllMetadata(options.audiencesMetaTagPrefix);
+  if (!Object.keys(audiences).length) {
+    return;
+  }
+
+  const usp = new URLSearchParams(window.location.search);
+  const forcedAudience = usp.has(options.audiencesQueryParameter)
+    ? toClassName(usp.get(options.audiencesQueryParameter))
+    : null;
+  const pill = createPopupButton(
+    'Audiences',
+    {
+      label: 'Audiences for this page:',
+    },
+    [
+      createAudience('default', !forcedAudience, options),
+      ...Object.keys(audiences)
+        .filter((a) => a !== 'audience')
+        .map((a) => createAudience(a, forcedAudience === a, options)),
+    ],
+  );
+
+  if (forcedAudience) {
+    pill.classList.add('is-active');
+  }
+  overlay.append(pill);
+}
+
 /**
  * Decorates Preview mode badges and overlays
  * @return {Object} returns a badge or empty string
  */
-export default async function decoratePreviewMode() {
+export default async function decoratePreviewMode(options) {
   try {
     const overlay = getOverlay();
+    await decorateAudiencesPill(overlay, options);
     await decorateExperimentPill(overlay);
   } catch (e) {
     // eslint-disable-next-line no-console
