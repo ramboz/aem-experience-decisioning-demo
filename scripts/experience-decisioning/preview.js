@@ -1,14 +1,3 @@
-import {
-  getMetadata,
-  toClassName,
-} from '../lib-franklin.js';
-
-import {
-  createPopupButton,
-  getOverlay,
-} from '../../tools/preview/preview.js';
-// eslint-disable-next-line import/no-cycle
-import { getAllMetadata } from '../scripts.js';
 /*
  * Copyright 2022 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
@@ -20,6 +9,18 @@ import { getAllMetadata } from '../scripts.js';
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+
+import {
+  getMetadata,
+  toClassName,
+} from '../lib-franklin.js';
+
+import {
+  createPopupButton,
+  getOverlay,
+} from '../../tools/preview/preview.js';
+// eslint-disable-next-line import/no-cycle
+import { getAllMetadata } from '../scripts.js';
 
 const percentformat = new Intl.NumberFormat('en-US', { style: 'percent', maximumSignificantDigits: 2 });
 const countformat = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2 });
@@ -215,7 +216,7 @@ async function decorateExperimentPill(overlay, options) {
       label: config.label,
       description: `
         <div class="hlx-details">
-          ${config.status}${config.audience ? ', ' : ''}${config.audience}${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}${config.variants[config.variantNames[0]].blocks.join(',')}
+          ${config.status}${config.resolvedAudiences.length ? ', ' : ''}${config.resolvedAudiences[0]}${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}${config.variants[config.variantNames[0]].blocks.join(',')}
         </div>
         <div class="hlx-info">How is it going?</div>`,
       actions: config.manifest ? [{ label: 'Manifest', href: config.manifest }] : [],

@@ -17,6 +17,11 @@ import {
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
 
+const AUDIENCES = { // add your custom audiences to the list
+  mobile: () => window.innerWidth < 600,
+  desktop: () => window.innerWidth >= 600,
+};
+
 /**
  * Gets all the metadata elements that are in the given scope.
  * @param {String} scope The scope/prefix for the metadata
@@ -47,17 +52,18 @@ window.hlx.plugins.push({
 // Experience decisioning
 window.hlx.plugins.push({
   condition: () => getMetadata('experiment')
-    || Object.keys(getAllMetadata('campaign')).length,
+    || Object.keys(getAllMetadata('campaign')).length
+    || Object.keys(getAllMetadata('audience')).length,
   loadEager: async () => {
     // eslint-disable-next-line import/no-cycle
     const { loadEager: runEager } = await import('./experience-decisioning/index.js');
-    await runEager();
+    await runEager({ audiences: AUDIENCES });
   },
   loadLazy: async () => {
     if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
       // eslint-disable-next-line import/extensions
       const { loadLazy: runLazy } = await import('./experience-decisioning/index.js');
-      await runLazy();
+      await runLazy({ audiences: AUDIENCES });
     }
   },
 });
