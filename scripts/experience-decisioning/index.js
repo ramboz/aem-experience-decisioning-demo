@@ -51,7 +51,7 @@ function isBot() {
  * @param {object} allAudiences object defining all available audiences and their resolution logic
  * @returns Returns the names of the resolved audiences
  */
-async function getResolvedAudiences(configured = [], allAudiences = {}) {
+export async function getResolvedAudiences(configured = [], allAudiences = {}) {
   const results = await Promise.all(
     configured
       .map((key) => {
@@ -442,7 +442,7 @@ export async function runCampaign(customOptions) {
     return null;
   }
 
-  if (audiences.length) {
+  if (!forcedAudience && audiences.length) {
     const resolvedAudiences = await getResolvedAudiences(
       audiences,
       options.audiences,

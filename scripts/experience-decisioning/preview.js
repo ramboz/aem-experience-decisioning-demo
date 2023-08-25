@@ -21,6 +21,7 @@ import {
 } from '../../tools/preview/preview.js';
 // eslint-disable-next-line import/no-cycle
 import { getAllMetadata } from '../scripts.js';
+import { getResolvedAudiences } from './index.js';
 
 const percentformat = new Intl.NumberFormat('en-US', { style: 'percent', maximumSignificantDigits: 2 });
 const countformat = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2 });
@@ -259,20 +260,34 @@ async function decorateCampaignPill(overlay, options) {
   }
 
   const usp = new URLSearchParams(window.location.search);
+  const forcedAudience = usp.has(options.audiencesQueryParameter)
+    ? toClassName(usp.get(options.audiencesQueryParameter))
+    : null;
+  const audiences = campaigns.audience.split(',').map(toClassName);
+  const resolvedAudiences = await getResolvedAudiences(audiences, options.audiences);
+  const isActive = forcedAudience ? audiences.includes(forcedAudience) : !!resolvedAudiences.length;
   const campaign = usp.has(options.campaignsQueryParameter)
     ? toClassName(usp.get(options.campaignsQueryParameter))
     : null;
   const pill = createPopupButton(
     `Campaign: ${campaign || 'default'}`,
     {
-      label: 'Campaigns on this page',
+      label: 'Campaigns on this page:',
+      description: `
+        <div class="hlx-details">
+          ${audiences.length && resolvedAudiences.length ? resolvedAudiences[0] : ''}
+          ${audiences.length && !resolvedAudiences.length ? 'No matching audience' : ''}
+        </div>`,
     },
     [
-      createCampaign('default', !campaign, options),
-      ...Object.keys(campaigns).map((c) => createCampaign(c, toClassName(campaign) === c, options)),
+      createCampaign('default', !campaign || !isActive, options),
+      ...Object.keys(campaigns)
+        .filter((c) => c !== 'audience')
+        .map((c) => createCampaign(c, isActive && toClassName(campaign) === c, options)),
     ],
   );
-  if (campaign) {
+
+  if (campaign && isActive) {
     pill.classList.add('is-active');
   }
   overlay.append(pill);
