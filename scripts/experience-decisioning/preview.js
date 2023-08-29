@@ -217,7 +217,12 @@ async function decorateExperimentPill(overlay, options) {
       label: config.label,
       description: `
         <div class="hlx-details">
-          ${config.status}${config.resolvedAudiences ? ', ' : ''}${config.resolvedAudiences.length ? config.resolvedAudiences[0] : 'No audience resolved'}${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}${config.variants[config.variantNames[0]].blocks.join(',')}
+          ${config.status}
+          ${config.resolvedAudiences ? ', ' : ''}
+          ${config.resolvedAudiences && config.resolvedAudiences.length ? config.resolvedAudiences[0] : ''}
+          ${config.resolvedAudiences && !config.resolvedAudiences.length ? 'No audience resolved' : ''}
+          ${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}
+          ${config.variants[config.variantNames[0]].blocks.join(',')}
         </div>
         <div class="hlx-info">How is it going?</div>`,
       actions: config.manifest ? [{ label: 'Manifest', href: config.manifest }] : [],
@@ -265,7 +270,9 @@ async function decorateCampaignPill(overlay, options) {
     : null;
   const audiences = campaigns.audience.split(',').map(toClassName);
   const resolvedAudiences = await getResolvedAudiences(audiences, options);
-  const isActive = forcedAudience ? audiences.includes(forcedAudience) : !!resolvedAudiences.length;
+  const isActive = forcedAudience
+    ? audiences.includes(forcedAudience)
+    : (!resolvedAudiences || !!resolvedAudiences.length);
   const campaign = (usp.has(options.campaignsQueryParameter)
     ? toClassName(usp.get(options.campaignsQueryParameter))
     : null)
@@ -312,7 +319,7 @@ function createAudience(audience, isSelected, options) {
  */
 async function decorateAudiencesPill(overlay, options) {
   const audiences = getAllMetadata(options.audiencesMetaTagPrefix);
-  if (!Object.keys(audiences).length) {
+  if (!Object.keys(audiences).length || !Object.keys(options.audiences).length) {
     return;
   }
 
@@ -348,7 +355,7 @@ export default async function decoratePreviewMode(options) {
     const overlay = getOverlay();
     await decorateAudiencesPill(overlay, options);
     await decorateCampaignPill(overlay, options);
-    await decorateExperimentPill(overlay);
+    await decorateExperimentPill(overlay, options);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(e);

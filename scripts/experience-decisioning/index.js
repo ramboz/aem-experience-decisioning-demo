@@ -23,12 +23,13 @@ export const DEFAULT_OPTIONS = {
   rumSamplingRate: 10, // 1 in 10 requests
 
   // Audiences related properties
+  audiences: {},
   audiencesMetaTagPrefix: 'audience',
   audiencesQueryParameter: 'audience',
 
   // Campaigns related properties
   campaignsMetaTagPrefix: 'campaign',
-  campaignsQueryParameter: 'campaign', // TODO: also support `utm_campaign`
+  campaignsQueryParameter: 'campaign',
 
   // Experimentation related properties
   experimentsRoot: '/experiments',
