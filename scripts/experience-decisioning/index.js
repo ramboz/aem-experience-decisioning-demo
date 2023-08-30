@@ -594,24 +594,26 @@ window.hlx.patchBlockConfig.push((config) => {
   };
 });
 
-function adjustedRumSamplingRate(customOptions) {
+let isAdjusted = false;
+function adjustedRumSamplingRate(checkpoint, customOptions) {
   const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
-  return (data, sendPing) => {
-    // track experiments with higher sampling rate
-    window.hlx.rum.weight = Math.min(window.hlx.rum.weight, pluginOptions.rumSamplingRate);
-    window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
-
-    sampleRUM.drain('stash', sampleRUM);
-    sendPing(data);
+  return (data) => {
+    if (!window.hlx.rum.isSelected && !isAdjusted) {
+      isAdjusted = true;
+      window.hlx.rum.weight = Math.min(window.hlx.rum.weight, pluginOptions.rumSamplingRate);
+      window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
+      if (window.hlx.rum.isSelected) {
+        sampleRUM(checkpoint, data);
+      }
+    }
     return true;
   };
 }
 
 export async function loadEager(customOptions = {}) {
-  sampleRUM.cases ||= {};
-  sampleRUM.cases.audiences = adjustedRumSamplingRate(customOptions);
-  sampleRUM.cases.campaign = adjustedRumSamplingRate(customOptions);
-  sampleRUM.cases.experiment = adjustedRumSamplingRate(customOptions);
+  sampleRUM.always.on('audiences', adjustedRumSamplingRate('audiences', customOptions));
+  sampleRUM.always.on('campaign', adjustedRumSamplingRate('campaign', customOptions));
+  sampleRUM.always.on('experiment', adjustedRumSamplingRate('experiment', customOptions));
   let res = await runCampaign(customOptions);
   if (!res) {
     res = await runExperiment(customOptions);
