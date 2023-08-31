@@ -19,13 +19,23 @@ import {
 import { getAllMetadata } from '../scripts.js';
 
 export const DEFAULT_OPTIONS = {
+  // Generic properties
+  rumSamplingRate: 10, // 1 in 10 requests
+
+  // Audiences related properties
+  audiences: {},
   audiencesMetaTagPrefix: 'audience',
   audiencesQueryParameter: 'audience',
-  root: '/experiments',
-  configFile: 'manifest.json',
-  metaTag: 'experiment',
-  queryParameter: 'experiment',
-  rumSamplingRate: 10, // 1 in 10 requests
+
+  // Campaigns related properties
+  campaignsMetaTagPrefix: 'campaign',
+  campaignsQueryParameter: 'campaign',
+
+  // Experimentation related properties
+  experimentsRoot: '/experiments',
+  experimentsConfigFile: 'manifest.json',
+  experimentsMetaTag: 'experiment',
+  experimentsQueryParameter: 'experiment',
 };
 
 /**
@@ -42,7 +52,7 @@ function isBot() {
  * @param {object} options the plugin options
  * @returns Returns the names of the resolved audiences, or `null` if no audience is configured
  */
-async function getResolvedAudiences(applicableAudiences, options) {
+export async function getResolvedAudiences(applicableAudiences, options) {
   if (!applicableAudiences.length || !Object.keys(options.audiences).length) {
     return null;
   }
@@ -269,7 +279,7 @@ export function getConfigForInstantExperiment(experimentId, instantExperiment) {
  * @returns {object} containing the experiment manifest
  */
 export async function getConfigForFullExperiment(experimentId, pluginOptions) {
-  const path = `${pluginOptions.root}/${experimentId}/${pluginOptions.configFile}`;
+  const path = `${pluginOptions.experimentsRoot}/${experimentId}/${pluginOptions.experimentsConfigFile}`;
   try {
     const resp = await fetch(path);
     if (!resp.ok) {
@@ -286,7 +296,7 @@ export async function getConfigForFullExperiment(experimentId, pluginOptions) {
     }
     config.id = experimentId;
     config.manifest = path;
-    config.basePath = `${pluginOptions.root}/${experimentId}`;
+    config.basePath = `${pluginOptions.experimentsRoot}/${experimentId}`;
     inferEmptyPercentageSplits(Object.values(config.variants));
     return config;
   } catch (e) {
@@ -375,7 +385,7 @@ export async function runExperiment(customOptions = {}) {
   }
 
   const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
-  const experiment = getMetadata('experiment');
+  const experiment = getMetadata(pluginOptions.experimentsMetaTag);
   if (!experiment) {
     return false;
   }
@@ -424,6 +434,56 @@ export async function runExperiment(customOptions = {}) {
     target: result ? experimentConfig.selectedVariant : experimentConfig.variantNames[0],
   });
   return result;
+}
+
+export async function runCampaign(customOptions) {
+  if (isBot()) {
+    return null;
+  }
+
+  const options = { ...DEFAULT_OPTIONS, ...customOptions };
+  const usp = new URLSearchParams(window.location.search);
+  const campaign = (usp.has(options.campaignsQueryParameter)
+    ? toClassName(usp.get(options.campaignsQueryParameter))
+    : null)
+    || (usp.has('utm_campaign') ? toClassName(usp.get('utm_campaign')) : null);
+  if (!campaign) {
+    return null;
+  }
+
+  const audiences = getMetadata('campaign-audience').split(',').map(toClassName);
+  const resolvedAudiences = await getResolvedAudiences(audiences, options);
+  if (!!resolvedAudiences && !resolvedAudiences.length) {
+    return false;
+  }
+
+  const allowedCampaigns = getAllMetadata(options.campaignsMetaTagPrefix);
+  if (!Object.keys(allowedCampaigns).includes(campaign)) {
+    return null;
+  }
+
+  const urlString = allowedCampaigns[campaign];
+  if (!urlString) {
+    return null;
+  }
+
+  try {
+    const url = new URL(urlString);
+    const result = replaceInner(url.pathname, document.querySelector('main'));
+    if (!result) {
+      // eslint-disable-next-line no-console
+      console.debug(`failed to serve campaign ${campaign}. Falling back to default content.`);
+    }
+    sampleRUM('campaign', {
+      source: window.location.href,
+      target: result ? campaign : 'default',
+    });
+    return result;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return null;
+  }
 }
 
 export async function serveAudience(customOptions) {
@@ -534,24 +594,33 @@ window.hlx.patchBlockConfig.push((config) => {
   };
 });
 
-function adjustedRumSamplingRate(customOptions) {
+let isAdjusted = false;
+function adjustedRumSamplingRate(checkpoint, customOptions) {
   const pluginOptions = { ...DEFAULT_OPTIONS, ...customOptions };
-  return (data, sendPing) => {
-    // track experiments with higher sampling rate
-    window.hlx.rum.weight = Math.min(window.hlx.rum.weight, pluginOptions.rumSamplingRate);
-    window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
-
-    sampleRUM.drain('stash', sampleRUM);
-    sendPing(data);
+  return (data) => {
+    if (!window.hlx.rum.isSelected && !isAdjusted) {
+      isAdjusted = true;
+      window.hlx.rum.weight = Math.min(window.hlx.rum.weight, pluginOptions.rumSamplingRate);
+      window.hlx.rum.isSelected = (window.hlx.rum.random * window.hlx.rum.weight < 1);
+      if (window.hlx.rum.isSelected) {
+        sampleRUM(checkpoint, data);
+      }
+    }
     return true;
   };
 }
 
 export async function loadEager(customOptions = {}) {
-  sampleRUM.cases ||= {};
-  sampleRUM.cases.experiment = adjustedRumSamplingRate(customOptions);
-  await runExperiment(customOptions);
-  await serveAudience(customOptions);
+  sampleRUM.always.on('audiences', adjustedRumSamplingRate('audiences', customOptions));
+  sampleRUM.always.on('campaign', adjustedRumSamplingRate('campaign', customOptions));
+  sampleRUM.always.on('experiment', adjustedRumSamplingRate('experiment', customOptions));
+  let res = await runCampaign(customOptions);
+  if (!res) {
+    res = await runExperiment(customOptions);
+  }
+  if (!res) {
+    res = await serveAudience(customOptions);
+  }
 }
 
 export async function loadLazy(customOptions = {}) {
@@ -559,6 +628,7 @@ export async function loadLazy(customOptions = {}) {
     ...DEFAULT_OPTIONS,
     ...customOptions,
   };
+  // eslint-disable-next-line import/no-cycle
   const preview = await import('./preview.js');
   preview.default(pluginOptions);
 }

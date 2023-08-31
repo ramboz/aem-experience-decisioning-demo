@@ -21,6 +21,7 @@ import {
 } from '../../tools/preview/preview.js';
 // eslint-disable-next-line import/no-cycle
 import { getAllMetadata } from '../scripts.js';
+import { getResolvedAudiences } from './index.js';
 
 const percentformat = new Intl.NumberFormat('en-US', { style: 'percent', maximumSignificantDigits: 2 });
 const countformat = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2 });
@@ -50,7 +51,7 @@ const bigcountformat = {
   },
 };
 
-function createVariant(experiment, variantName, config) {
+function createVariant(experiment, variantName, config, options) {
   const selectedVariant = config?.selectedVariant || config?.variantNames[0];
   const variant = config.variants[variantName];
   const split = variant.percentageSplit;
@@ -58,7 +59,7 @@ function createVariant(experiment, variantName, config) {
 
   const experimentURL = new URL(window.location.href);
   // this will retain other query params such as ?rum=on
-  experimentURL.searchParams.set('experiment', `${experiment}/${variantName}`);
+  experimentURL.searchParams.set(options.experimentsQueryParameter, `${experiment}/${variantName}`);
 
   return {
     label: `<code>${variantName}</code>`,
@@ -71,10 +72,10 @@ function createVariant(experiment, variantName, config) {
   };
 }
 
-async function fetchRumData(experiment) {
+async function fetchRumData(experiment, options) {
   // the query is a bit slow, so I'm only fetching the results when the popup is opened
   const resultsURL = new URL('https://helix-pages.anywhere.run/helix-services/run-query@v2/rum-experiments');
-  resultsURL.searchParams.set('experiment', experiment);
+  resultsURL.searchParams.set(options.experimentsQueryParameter, experiment);
   if (window.hlx.sidekickConfig && window.hlx.sidekickConfig.host) {
     // restrict results to the production host, this also reduces query cost
     resultsURL.searchParams.set('domain', window.hlx.sidekickConfig.host);
@@ -201,9 +202,9 @@ function populatePerformanceMetrics(div, config, {
  * Create Badge if a Page is enlisted in a Helix Experiment
  * @return {Object} returns a badge or empty string
  */
-async function decorateExperimentPill(overlay) {
+async function decorateExperimentPill(overlay, options) {
   const config = window?.hlx?.experiment;
-  const experiment = toClassName(getMetadata('experiment'));
+  const experiment = toClassName(getMetadata(options.experimentsMetaTag));
   // eslint-disable-next-line no-console
   console.log('preview experiment', experiment);
   if (!experiment || !config) {
@@ -216,21 +217,89 @@ async function decorateExperimentPill(overlay) {
       label: config.label,
       description: `
         <div class="hlx-details">
-          ${config.status}${config.resolvedAudiences ? ', ' : ''}${config.resolvedAudiences.length ? config.resolvedAudiences[0] : 'No audience resolved'}${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}${config.variants[config.variantNames[0]].blocks.join(',')}
+          ${config.status}
+          ${config.resolvedAudiences ? ', ' : ''}
+          ${config.resolvedAudiences && config.resolvedAudiences.length ? config.resolvedAudiences[0] : ''}
+          ${config.resolvedAudiences && !config.resolvedAudiences.length ? 'No audience resolved' : ''}
+          ${config.variants[config.variantNames[0]].blocks.length ? ', Blocks: ' : ''}
+          ${config.variants[config.variantNames[0]].blocks.join(',')}
         </div>
         <div class="hlx-info">How is it going?</div>`,
       actions: config.manifest ? [{ label: 'Manifest', href: config.manifest }] : [],
     },
-    config.variantNames.map((vname) => createVariant(experiment, vname, config)),
+    config.variantNames.map((vname) => createVariant(experiment, vname, config, options)),
   );
   pill.classList.add(`is-${toClassName(config.status)}`);
   overlay.append(pill);
 
-  const performanceMetrics = await fetchRumData(experiment);
+  const performanceMetrics = await fetchRumData(experiment, options);
   if (performanceMetrics === null) {
     return;
   }
   populatePerformanceMetrics(pill, config, performanceMetrics);
+}
+
+function createCampaign(campaign, isSelected, options) {
+  const url = new URL(window.location.href);
+  if (campaign !== 'default') {
+    url.searchParams.set(options.campaignsQueryParameter, campaign);
+  } else {
+    url.searchParams.delete(options.campaignsQueryParameter);
+  }
+
+  return {
+    label: `<code>${campaign}</code>`,
+    actions: [{ label: 'Simulate', href: url.href }],
+    isSelected,
+  };
+}
+
+/**
+ * Create Badge if a Page is enlisted in a Franklin Campign
+ * @return {Object} returns a badge or empty string
+ */
+async function decorateCampaignPill(overlay, options) {
+  const campaigns = getAllMetadata(options.campaignsMetaTagPrefix);
+  if (!Object.keys(campaigns).length) {
+    return;
+  }
+
+  const usp = new URLSearchParams(window.location.search);
+  const forcedAudience = usp.has(options.audiencesQueryParameter)
+    ? toClassName(usp.get(options.audiencesQueryParameter))
+    : null;
+  const audiences = campaigns.audience.split(',').map(toClassName);
+  const resolvedAudiences = await getResolvedAudiences(audiences, options);
+  const isActive = forcedAudience
+    ? audiences.includes(forcedAudience)
+    : (!resolvedAudiences || !!resolvedAudiences.length);
+  const campaign = (usp.has(options.campaignsQueryParameter)
+    ? toClassName(usp.get(options.campaignsQueryParameter))
+    : null)
+    || (usp.has('utm_campaign') ? toClassName(usp.get('utm_campaign')) : null);
+  const pill = createPopupButton(
+    `Campaign: ${campaign || 'default'}`,
+    {
+      label: 'Campaigns on this page:',
+      description: `
+        <div class="hlx-details">
+          ${audiences.length && resolvedAudiences?.length ? `Audience: ${resolvedAudiences[0]}` : ''}
+          ${audiences.length && !resolvedAudiences?.length ? 'No audience resolved' : ''}
+          ${!audiences.length || !resolvedAudiences ? 'No audience configured' : ''}
+        </div>`,
+    },
+    [
+      createCampaign('default', !campaign || !isActive, options),
+      ...Object.keys(campaigns)
+        .filter((c) => c !== 'audience')
+        .map((c) => createCampaign(c, isActive && toClassName(campaign) === c, options)),
+    ],
+  );
+
+  if (campaign && isActive) {
+    pill.classList.add('is-active');
+  }
+  overlay.append(pill);
 }
 
 function createAudience(audience, isSelected, options) {
@@ -250,7 +319,7 @@ function createAudience(audience, isSelected, options) {
  */
 async function decorateAudiencesPill(overlay, options) {
   const audiences = getAllMetadata(options.audiencesMetaTagPrefix);
-  if (!Object.keys(audiences).length) {
+  if (!Object.keys(audiences).length || !Object.keys(options.audiences).length) {
     return;
   }
 
@@ -285,7 +354,8 @@ export default async function decoratePreviewMode(options) {
   try {
     const overlay = getOverlay();
     await decorateAudiencesPill(overlay, options);
-    await decorateExperimentPill(overlay);
+    await decorateCampaignPill(overlay, options);
+    await decorateExperimentPill(overlay, options);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.log(e);

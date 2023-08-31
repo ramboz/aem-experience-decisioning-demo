@@ -52,6 +52,7 @@ window.hlx.plugins.push({
 // Experience decisioning
 window.hlx.plugins.push({
   condition: () => getMetadata('experiment')
+    || Object.keys(getAllMetadata('campaign')).length
     || Object.keys(getAllMetadata('audience')).length,
   loadEager: async () => {
     // eslint-disable-next-line import/no-cycle
