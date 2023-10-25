@@ -9,10 +9,12 @@ import {
   decorateBlocks,
   decorateTemplateAndTheme,
   getMetadata,
+  toCamelCase,
   toClassName,
   waitForLCP,
   loadBlocks,
   loadCSS,
+  loadScript,
 } from './lib-franklin.js';
 
 const LCP_BLOCKS = []; // add your LCP blocks to the list
@@ -38,43 +40,15 @@ export function getAllMetadata(scope) {
     }, {});
 }
 
-// Franklin plugins
-window.hlx.plugins = [];
-// Preview overlay
-window.hlx.plugins.push({
-  condition: () => window.location.hostname.endsWith('hlx.page')
-    || window.location.hostname === 'localhost',
-  loadLazy: async () => {
-    const preview = await import('../tools/preview/preview.js');
-    preview.default();
-  },
-});
-// Experience decisioning
-window.hlx.plugins.push({
-  condition: () => getMetadata('experiment')
-    || Object.keys(getAllMetadata('audience')).length,
-  loadEager: async () => {
-    // eslint-disable-next-line import/no-cycle
-    const { loadEager: runEager } = await import('./experience-decisioning/index.js');
-    await runEager({ audiences: AUDIENCES });
-  },
-  loadLazy: async () => {
-    if (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost')) {
-      // eslint-disable-next-line import/extensions
-      const { loadLazy: runLazy } = await import('./experience-decisioning/index.js');
-      await runLazy({ audiences: AUDIENCES });
-    }
-  },
-});
-
-async function runPlugin(phase) {
-  return window.hlx.plugins
-    .reduce((promise, plugin) => (
-      plugin[phase] && (!plugin.condition || plugin.condition())
-        ? promise.then(() => plugin[phase]())
-        : promise
-    ), Promise.resolve());
-}
+const pluginContext = {
+  getAllMetadata,
+  getMetadata,
+  loadCSS,
+  loadScript,
+  sampleRUM,
+  toCamelCase,
+  toClassName,
+};
 
 /**
  * Builds hero block and prepends to main in a new section.
@@ -137,7 +111,14 @@ export function decorateMain(main) {
 async function loadEager(doc) {
   document.documentElement.lang = 'en';
   decorateTemplateAndTheme();
-  await runPlugin('loadEager');
+  // Add below snippet early in the eager phase
+  if (getMetadata('experiment')
+    || Object.keys(getAllMetadata('campaign')).length
+    || Object.keys(getAllMetadata('audience')).length) {
+    // eslint-disable-next-line import/no-relative-packages
+    const { loadEager: runEager } = await import('../plugins/experience-decisioning/src/index.js');
+    await runEager(document, { audiences: AUDIENCES }, pluginContext);
+  }
   const main = doc.querySelector('main');
   if (main) {
     decorateMain(main);
@@ -177,7 +158,14 @@ async function loadLazy(doc) {
   sampleRUM.observe(main.querySelectorAll('div[data-block-name]'));
   sampleRUM.observe(main.querySelectorAll('picture > img'));
 
-  await runPlugin('loadLazy');
+  if ((getMetadata('experiment')
+    || Object.keys(getAllMetadata('campaign')).length
+    || Object.keys(getAllMetadata('audience')).length)
+    && (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost'))) {
+    // eslint-disable-next-line import/no-relative-packages
+    const { loadLazy: runLazy } = await import('../plugins/experience-decisioning/src/index.js');
+    await runLazy(document, { audiences: AUDIENCES }, pluginContext);
+  }
 }
 
 /**
