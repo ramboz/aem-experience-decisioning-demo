@@ -295,6 +295,22 @@ function getMetadata(name, doc = document) {
 }
 
 /**
+ * Gets all the metadata elements that are in the given scope.
+ * @param {String} scope The scope/prefix for the metadata
+ * @returns an array of HTMLElement nodes that match the given scope
+ */
+function getAllMetadata(scope) {
+  return [...document.head.querySelectorAll(`meta[property^="${scope}:"],meta[name^="${scope}-"]`)]
+    .reduce((res, meta) => {
+      const id = toClassName(meta.name
+        ? meta.name.substring(scope.length + 1)
+        : meta.getAttribute('property').split(':')[1]);
+      res[id] = meta.getAttribute('content');
+      return res;
+    }, {});
+}
+
+/**
  * Returns a picture element with webp and fallbacks
  * @param {string} src The image URL
  * @param {string} [alt] The image alternative text
@@ -565,11 +581,12 @@ function getBlockConfig(block) {
   const cssPath = `${window.hlx.codeBasePath}/blocks/${blockName}/${blockName}.css`;
   const jsPath = `${window.hlx.codeBasePath}/blocks/${blockName}/${blockName}.js`;
   const original = { blockName, cssPath, jsPath };
-  return window.hlx.patchBlockConfig.reduce(
+  return (window.hlx.patchBlockConfig || []).reduce(
     (config, fn) => (typeof fn === 'function' ? fn(config, original) : config),
     { blockName, cssPath, jsPath },
   );
 }
+
 /**
  * Loads JS and CSS for a block.
  * @param {Element} block The block element
@@ -703,6 +720,7 @@ export {
   decorateSections,
   decorateTemplateAndTheme,
   fetchPlaceholders,
+  getAllMetadata,
   getMetadata,
   loadBlock,
   loadBlocks,
