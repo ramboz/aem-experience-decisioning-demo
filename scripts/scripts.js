@@ -145,8 +145,7 @@ async function loadLazy(doc) {
 
   if ((getMetadata('experiment')
     || Object.keys(getAllMetadata('campaign')).length
-    || Object.keys(getAllMetadata('audience')).length)
-    && (window.location.hostname.endsWith('hlx.page') || window.location.hostname === ('localhost'))) {
+    || Object.keys(getAllMetadata('audience')).length)) {
     // eslint-disable-next-line import/no-relative-packages
     const { loadLazy: runLazy } = await import('../plugins/experience-decisioning/src/index.js');
     await runLazy(document, { audiences: AUDIENCES }, pluginContext);
