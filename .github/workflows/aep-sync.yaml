@@ -7,4 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - run: |
-        echo "Payload: ${{ github.event.client_payload }}"
+        echo "Status: ${{ github.event.client_payload.status }}"
+        echo "Path: ${{ github.event.client_payload.path }}"
+        echo "Source Locations: ${{ github.event.client_payload.sourceLocation }}"
+        echo "Num Rows: ${{ github.event.client_payload.numRows }}"
+        echo "Header names: ${{ github.event.client_payload.headerNames }}"
+        echo "Range: ${{ github.event.client_payload.range }}"
