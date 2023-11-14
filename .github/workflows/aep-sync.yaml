@@ -6,10 +6,14 @@ jobs:
   print:
     runs-on: ubuntu-latest
     steps:
-    - run: |
-        echo "Status: ${{ github.event.client_payload.status }}"
-        echo "Path: ${{ github.event.client_payload.path }}"
-        echo "Source Locations: ${{ github.event.client_payload.sourceLocation }}"
-        echo "Num Rows: ${{ github.event.client_payload.numRows }}"
-        echo "Header names: ${{ github.event.client_payload.headerNames }}"
-        echo "Range: ${{ github.event.client_payload.range }}"
+      - uses: adobe-rnd/aem-experiments-gh-actions/aep-sync
+        with:
+          aio_console_client_id: ${{ secrets.aio_console_client_id }}
+          aio_console_client_secret: ${{ secrets.aio_console_client_secret }}
+          aio_console_ims_org_id: ${{ secrets.aio_console_ims_org_id }}
+          aio_console_technical_acccount_email: ${{ secrets.aio_console_technical_acccount_email }}
+          aio_console_technical_acccount_id: ${{ secrets.aio_console_technical_acccount_id }}
+          git_pat_token: ${{ secrets.git_pat_token }}
+          resource_path: ${{ github.event.client_payload.path }}
+          git_repo: ${{ github.repository }}
+          git_ref: ${{ github.ref_name }}
