@@ -6,7 +6,7 @@ jobs:
   print:
     runs-on: ubuntu-latest
     steps:
-      - uses: github/adobe-rnd/aem-experiments-gh-actions/aep-sync@main
+      - uses: adobe-rnd/aem-experiments-gh-actions/aep-sync@main
         with:
           aio_console_client_id: ${{ secrets.aio_console_client_id }}
           aio_console_client_secret: ${{ secrets.aio_console_client_secret }}
