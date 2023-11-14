@@ -3,7 +3,7 @@ on:
     types:
       - resource-published
 jobs:
-  print:
+  sync-with-aep:
     runs-on: ubuntu-latest
     steps:
       - uses: adobe-rnd/aem-experiments-gh-actions/aep-sync@main
@@ -11,8 +11,8 @@ jobs:
           aio_console_client_id: ${{ secrets.aio_console_client_id }}
           aio_console_client_secret: ${{ secrets.aio_console_client_secret }}
           aio_console_ims_org_id: ${{ secrets.aio_console_ims_org_id }}
-          aio_console_technical_acccount_email: ${{ secrets.aio_console_technical_acccount_email }}
-          aio_console_technical_acccount_id: ${{ secrets.aio_console_technical_acccount_id }}
+          aio_console_technical_account_email: ${{ secrets.aio_console_technical_acccount_email }}
+          aio_console_technical_account_id: ${{ secrets.aio_console_technical_acccount_id }}
           git_pat_token: ${{ secrets.git_pat_token }}
           resource_path: ${{ github.event.client_payload.path }}
           git_repo: ${{ github.repository }}
