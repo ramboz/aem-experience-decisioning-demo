@@ -2,6 +2,8 @@ on:
   repository_dispatch:
     types:
       - resource-published
+      - resource-unpublished
+
 jobs:
   sync-with-aep:
     permissions:
