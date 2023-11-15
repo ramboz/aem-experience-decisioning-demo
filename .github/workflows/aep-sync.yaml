@@ -8,7 +8,9 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: adobe-rnd/aem-experiments-gh-actions/aep-sync@main
+      - name: Sync AEP Experiment config
+        uses: adobe-rnd/aem-experiments-gh-actions/aep-sync@main
+        if: ${{ endsWith(github.event.client_payload.path, '.md') }}
         with:
           aio_console_client_id: ${{ secrets.aio_console_client_id }}
           aio_console_client_secret: ${{ secrets.aio_console_client_secret }}
