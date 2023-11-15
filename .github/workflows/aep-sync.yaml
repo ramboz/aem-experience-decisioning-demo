@@ -4,6 +4,8 @@ on:
       - resource-published
 jobs:
   sync-with-aep:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: adobe-rnd/aem-experiments-gh-actions/aep-sync@main
