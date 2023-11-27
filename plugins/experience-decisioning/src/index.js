@@ -215,17 +215,42 @@ function inferEmptyPercentageSplits(variants) {
     });
   }
 }
+export async function fetchExperimentManifest(urlString, experimentId, parser, pluginOptions, context) {
+  const url = new URL(urlString, window.location.origin);
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      // eslint-disable-next-line no-console
+      console.log('error loading experiment config:', resp);
+      return null;
+    }
+    const json = await resp.json();
+    const config = parser(json, context);
+    if (!config) {
+      return null;
+    }
+    config.id = experimentId;
+    config.manifest = url.pathname;
+    config.basePath = `${pluginOptions.experimentsRoot}/${experimentId}`;
+    inferEmptyPercentageSplits(Object.values(config.variants));
+    return config;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.log(`error loading experiment manifest: ${url.pathname}`, e);
+  }
+  return null;
+}
 
 /**
  * Gets experiment config from the metadata.
  *
  * @param {string} experimentId The experiment identifier
- * @param {string} instantExperiment The list of varaints
+ * @param {object} experimentMeta The experiment metadata
  * @returns {object} the experiment manifest
  */
 export function getConfigForInstantExperiment(
   experimentId,
-  instantExperiment,
+  experimentMeta,
   pluginOptions,
   context,
 ) {
@@ -239,7 +264,7 @@ export function getConfigForInstantExperiment(
     variantNames: [],
   };
 
-  const pages = instantExperiment.split(',').map((p) => new URL(p.trim()).pathname);
+  const pages = experimentMeta.variants.split(',').map((p) => new URL(p.trim()).pathname);
 
   const splitString = context.getMetadata(`${pluginOptions.experimentsMetaTag}-split`);
   const splits = splitString
@@ -336,15 +361,66 @@ function getDecisionPolicy(config) {
   return decisionPolicy;
 }
 
-export async function getConfig(experiment, instantExperiment, pluginOptions, context) {
+export async function getConfig(experiment, experimentMeta, pluginOptions, context) {
   const usp = new URLSearchParams(window.location.search);
   const [forcedExperiment, forcedVariant] = usp.has(pluginOptions.experimentsQueryParameter)
     ? usp.get(pluginOptions.experimentsQueryParameter).split('/')
     : [];
 
-  const experimentConfig = instantExperiment
-    ? await getConfigForInstantExperiment(experiment, instantExperiment, pluginOptions, context)
-    : await getConfigForFullExperiment(experiment, pluginOptions, context);
+  let experimentConfig;
+  switch (context.toClassName(experimentMeta.engine)) {
+    case 'aep':
+      console.log('aep', experimentMeta);
+      break;
+    case 'ajo':
+      console.log('ajo', experimentMeta);
+      break;
+    case 'target':
+      experimentConfig = await fetchExperimentManifest(`experiments${window.location.pathname.endsWith('/') ? window.location.pathname + 'index': window.location.pathname}.${pluginOptions.experimentsConfigFile}`, experiment, (json) => ({
+        id: json.id,
+        label: json.name,
+        audiences: [],
+        status: 'active',
+        variants: json.experiences.reduce((res, e) => {
+          res[context.toClassName(e.name)] = {
+            percentageSplit: (e.visitorPercentage / 100).toFixed(2),
+            pages: [window.location.pathname],
+            blocks: [],
+            label: e.name,
+            modifications: e.optionLocations.map((loc) => {
+              const modif = json.options.find((o) => o.optionLocalId === loc.optionLocalId);
+              if (!modif.offerTemplates[0]) {
+                return {};
+              }
+              const params = modif.offerTemplates[0].templateParameters;
+              return {
+                selector: params.find((p) => p.name === 'cssSelector')?.value,
+                content: params.find((p) => p.name === 'offerContent')?.value,
+                attr: params.find((p) => p.name === 'attribute')?.value,
+                prop: params.find((p) => p.name === 'property')?.value,
+                value: params.find((p) => p.name === 'value')?.value,
+              };
+            }),
+          };
+          return res;
+        }, {}),
+        variantNames: json.experiences.map((e) => context.toClassName(e.name)).sort((a, b) => {
+          if (a === 'control') {
+            return -1;
+          }
+          if (b === 'control') {
+            return 1;
+          }
+          return a.localeCompare(b);
+        }),
+      }), pluginOptions, context);
+      console.log('target', experimentMeta, experimentConfig);
+      break;
+    default:
+      experimentConfig = experimentMeta.variants
+        ? await getConfigForInstantExperiment(experiment, experimentMeta, pluginOptions, context)
+        : await getConfigForFullExperiment(experiment, pluginOptions, context);
+  }
 
   // eslint-disable-next-line no-console
   console.debug(experimentConfig);
@@ -399,11 +475,11 @@ export async function runExperiment(document, options, context) {
   if (!experiment) {
     return false;
   }
-  const variants = context.getMetadata('instant-experiment')
-    || context.getMetadata(`${pluginOptions.experimentsMetaTag}-variants`);
+  const experimentMeta = context.getAllMetadata(pluginOptions.experimentsMetaTag);
+  experimentMeta.variants ||= context.getMetadata('instant-experiment');
   let experimentConfig;
   try {
-    experimentConfig = await getConfig(experiment, variants, pluginOptions, context);
+    experimentConfig = await getConfig(experiment, experimentMeta, pluginOptions, context);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Invalid experiment config.', err);
@@ -420,7 +496,7 @@ export async function runExperiment(document, options, context) {
     return false;
   }
 
-  const { pages } = experimentConfig.variants[experimentConfig.selectedVariant];
+  const { pages, modifications } = experimentConfig.variants[experimentConfig.selectedVariant];
   if (!pages.length) {
     return false;
   }
@@ -428,23 +504,48 @@ export async function runExperiment(document, options, context) {
   const currentPath = window.location.pathname;
   const control = experimentConfig.variants[experimentConfig.variantNames[0]];
   const index = control.pages.indexOf(currentPath);
-  if (index < 0 || pages[index] === currentPath) {
-    return false;
+  let modified = false;
+  if (index >= 0 || pages[index] !== currentPath) {
+    // Fullpage content experiment
+    document.body.classList.add(`experiment-${experimentConfig.id}`);
+    modified = await replaceInner(pages[0], document.querySelector('main'));
+    if (!modified) {
+      // eslint-disable-next-line no-console
+      console.debug(`failed to serve variant ${window.hlx.experiment.selectedVariant}. Falling back to ${experimentConfig.variantNames[0]}.`);
+    }
+    document.body.classList.add(`variant-${modified ? experimentConfig.selectedVariant : experimentConfig.variantNames[0]}`);
+    context.sampleRUM('experiment', {
+      source: experimentConfig.id,
+      target: modified ? experimentConfig.selectedVariant : experimentConfig.variantNames[0],
+    });
   }
 
-  // Fullpage content experiment
-  document.body.classList.add(`experiment-${experimentConfig.id}`);
-  const result = await replaceInner(pages[0], document.querySelector('main'));
-  if (!result) {
-    // eslint-disable-next-line no-console
-    console.debug(`failed to serve variant ${window.hlx.experiment.selectedVariant}. Falling back to ${experimentConfig.variantNames[0]}.`);
+  console.log(modifications);
+  if (modifications) {
+    modifications.forEach((m) => {
+      const el = document.querySelector(m.selector);
+      if (el) {
+        if (m.content) {
+          el.textContent = m.content;
+        }
+        if (m.attr) {
+          el.setAttribute(m.attr, m.value);
+        }
+        if (m.prop) {
+          switch (m.prop) {
+            case 'background':
+              el.style[m.prop] = m.value;
+              break;
+            default:
+              el[m.prop] = m.value;
+          }
+        }
+      }
+    });
+    modified ||= true;
   }
-  document.body.classList.add(`variant-${result ? experimentConfig.selectedVariant : experimentConfig.variantNames[0]}`);
-  context.sampleRUM('experiment', {
-    source: experimentConfig.id,
-    target: result ? experimentConfig.selectedVariant : experimentConfig.variantNames[0],
-  });
-  return result;
+
+  return modified;
 }
 
 export async function runCampaign(document, options, context) {
