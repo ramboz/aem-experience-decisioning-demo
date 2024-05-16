@@ -97,12 +97,10 @@ async function loadEager(doc) {
   document.documentElement.lang = 'en';
   decorateTemplateAndTheme();
   // Add below snippet early in the eager phase
-  if (getMetadata('experiment')
-    || Object.keys(getAllMetadata('campaign')).length
-    || Object.keys(getAllMetadata('audience')).length) {
+  if (document.head.querySelectorAll('meta[name^="experiment-"],meta[name^="campaign-"],meta[name^="audience-"]').length) {
     // eslint-disable-next-line import/no-relative-packages
-    const { loadEager: runEager } = await import('../plugins/experience-decisioning/src/index.js');
-    await runEager(document, { audiences: AUDIENCES }, pluginContext);
+    const { loadEager: runEager } = await import('../plugins/experimentation/src/index.js');
+    await runEager(document, { audiences: AUDIENCES });
   }
   const main = doc.querySelector('main');
   if (main) {
@@ -143,12 +141,10 @@ async function loadLazy(doc) {
   sampleRUM.observe(main.querySelectorAll('div[data-block-name]'));
   sampleRUM.observe(main.querySelectorAll('picture > img'));
 
-  if ((getMetadata('experiment')
-    || Object.keys(getAllMetadata('campaign')).length
-    || Object.keys(getAllMetadata('audience')).length)) {
+  if (document.head.querySelectorAll('meta[name^="experiment-"],meta[name^="campaign-"],meta[name^="audience-"]').length) {
     // eslint-disable-next-line import/no-relative-packages
-    const { loadLazy: runLazy } = await import('../plugins/experience-decisioning/src/index.js');
-    await runLazy(document, { audiences: AUDIENCES }, pluginContext);
+    const { loadLazy: runLazy } = await import('../plugins/experimentation/src/index.js');
+    await runLazy(document, { audiences: AUDIENCES });
   }
 }
 
