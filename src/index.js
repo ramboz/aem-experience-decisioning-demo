@@ -52,6 +52,9 @@ export const DEFAULT_OPTIONS = {
 };
 
 function stringToArray(str) {
+  if (Array.isArray(str)) {
+    return str;
+  }
   return str ? str.split(/[,\n]/).filter((s) => s.trim()) : [];
 }
 
@@ -204,7 +207,7 @@ async function replaceInner(path, el) {
     // parse with DOMParser to guarantee valid HTML, and no script execution(s)
     const dom = new DOMParser().parseFromString(html, 'text/html');
     // eslint-disable-next-line no-param-reassign
-    const newEl = dom.querySelector(el.tagName === 'MAIN' ? 'main' : 'main > div')
+    const newEl = dom.querySelector(el.tagName === 'MAIN' ? 'main' : 'main > div');
     el.innerHTML = newEl.innerHTML;
     return path;
   } catch (e) {
@@ -327,6 +330,61 @@ function getModificationsHandler(
   };
 }
 
+async function getManifestEntries(urlString) {
+  try {
+    const url = new URL(urlString, window.location.origin);
+    const response = await fetch(url);
+    const json = await response.json();
+    return json.data
+      .map((entry) => Object.keys(entry).reduce((res, k) => {
+        res[k.toLowerCase()] = entry[k];
+        return res;
+      }, {}))
+      .filter((entry) => !entry.page || entry.page === window.location.pathname)
+      .filter((entry) => entry.selector)
+      .filter((entry) => entry.url);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('Cannot apply manifest: ', urlString, err);
+  }
+  return null;
+}
+
+function watchMutationsAndApplyFragments(ns, scope, entries, aggregator, pluginOptions, metadataToConfig, overrides, cb) {
+  if (!entries.length) {
+    return;
+  }
+
+  new MutationObserver(async (_, observer) => {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const entry of entries) {
+      // eslint-disable-next-line no-await-in-loop
+      const config = await metadataToConfig(pluginOptions, entry, overrides);
+      if (!config || entry.isApplied) {
+        return;
+      }
+      const el = scope.querySelector(entry.selector);
+      if (!el) {
+        return;
+      }
+      entry.isApplied = true;
+      const fragmentNS = { config, el };
+      const url = config.variants[config.selectedVariant].pages[0];
+      // eslint-disable-next-line no-await-in-loop
+      const res = await replaceInner(url, el);
+      cb(el.tagName === 'MAIN' ? document.body : fragmentNS.el, fragmentNS.config, res ? url : null);
+      if (res) {
+        fragmentNS.servedExperience = url;
+      }
+      debug('fragment', ns, fragmentNS);
+      aggregator.push(fragmentNS);
+    }
+    if (entries.every((entry) => entry.isApplied)) {
+      observer.disconnect();
+    }
+  }).observe(scope, { childList: true, subtree: true });
+}
+
 async function applyAllModifications(
   ns,
   paramNS,
@@ -343,22 +401,27 @@ async function applyAllModifications(
     cb,
   );
 
+  const fragmentsNS = [];
+
   // Full-page modifications
+  const pageMetadata = getAllMetadata(ns);
   const pageNS = await modificationsHandler(
     document.querySelector('main'),
-    getAllMetadata(ns),
+    pageMetadata,
   );
   if (pageNS) {
     debug('page', ns, pageNS);
   }
 
   // Section-level modifications
+  let sectionMetadata;
   const sectionsNS = [];
   await Promise.all([...document.querySelectorAll('.section-metadata')]
     .map(async (sm) => {
+      sectionMetadata = getAllSectionMeta(sm, ns);
       const sectionNS = await modificationsHandler(
         sm.parentElement,
-        getAllSectionMeta(sm, ns),
+        sectionMetadata,
       );
       if (sectionNS) {
         debug('section', ns, sectionNS);
@@ -366,18 +429,39 @@ async function applyAllModifications(
       }
     }));
 
-  // TODO: Fragment-level modifications via manifest
-  const fragmentsNS = [];
+  if (pageMetadata.manifest) {
+    let entries = await getManifestEntries(pageMetadata.manifest);
+    if (ns === pluginOptions.experimentsMetaTag) {
+      entries = Object.values(Object.groupBy(entries, ({ experiment }) => experiment))
+        .map((e) => e.reduce((aggregator, entry) => {
+          Object.entries(entry).forEach(([key, value]) => {
+            if (!aggregator[key]) {
+              aggregator[key] = value;
+            } else if (aggregator[key] !== value) {
+              if (/(splits?|urls?|variants?)/.test(key)) {
+                aggregator[key] = [].concat(aggregator[key], value);
+              } else {
+                // eslint-disable-next-line no-console
+                console.warn(`Key "${key}" in the experiment manifest must be the same for every variant.`);
+              }
+            }
+          });
+          return aggregator;
+        }, {}));
+    }
+    watchMutationsAndApplyFragments(ns, document.body, entries, fragmentsNS, pluginOptions, metadataToConfig, getAllQueryParameters(paramNS), cb);
+  }
 
   return { page: pageNS, sections: sectionsNS, fragments: fragmentsNS };
 }
 
 async function getExperimentConfig(pluginOptions, metadata, overrides) {
-  if (!metadata.value) {
+  const id = toClassName(metadata.value || metadata.experiment);
+  if (!id) {
     return null;
   }
 
-  let pages = metadata.variants;
+  let pages = metadata.variants || metadata.url;
 
   // Backward compatibility
   if (!pages) {
@@ -434,8 +518,8 @@ async function getExperimentConfig(pluginOptions, metadata, overrides) {
   const endDate = metadata.endDate ? new Date(metadata.endDate) : null;
 
   const config = {
-    id: toClassName(metadata.value),
-    label: metadata.name || `Experiment ${metadata.value}`,
+    id,
+    label: metadata.name || `Experiment ${metadata.value || metadata.experiment}`,
     status: metadata.status || 'active',
     audiences,
     endDate,
